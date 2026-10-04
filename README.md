@@ -1,118 +1,125 @@
-# 🎮 Playdate-Pi — Emulador de Playdate en Python
+# 🎮 Playdate-Pi — Playdate emulator in Python
 
-Un **runtime/emulador del Playdate** escrito en Python que ejecuta **juegos
-compilados reales `.pdx`** (bytecode Lua 5.4 de 32 bits), reimplementando la API
-`playdate.*` sobre Lua vía **lupa**, con render y audio por **pygame-ce**.
+A **runtime/emulator for the Playdate** written in Python that runs **real
+compiled games `.pdx`** (Lua 5.4 / 32-bit bytecode), reimplementing the
+`playdate.*` API on top of Lua via **lupa**, with rendering and audio via
+**pygame-ce**.
 
-No es un emulador a nivel de CPU (no QEMU): es un **runtime** que carga el
-`.pdx`, decodifica los formatos compilados (`.pdz`, `.pdi`, `.pdt`, `.pft`,
-`.pda`) y ejecuta los chunks Lua, traduciendo la API del SDK de Playdate a
-Python. Corre igual en tu Mac y en una Raspberry Pi Zero 2 W.
+It is not a CPU-level emulator (no QEMU): it is a **runtime** that loads the
+`.pdx`, decodes the compiled formats (`.pdz`, `.pdi`, `.pdt`, `.pft`, `.pda`)
+and executes the Lua chunks, translating the Playdate SDK API to Python. It
+runs the same on your Mac and on a Raspberry Pi Zero 2 W.
 
-> Funciona con **homebrew / juegos de itch.io sin cifrar** y con los ejemplos
-> del SDK. Los juegos cifrados de la Catalog (`bit 0x40000000`) no se ejecutan.
+> It works with **homebrew / itch.io unencrypted games** and SDK examples.
+> Encrypted Catalog games (`bit 0x40000000`) are not executed.
 
-## 📸 Juegos probados
+## 📸 Tested games
 
-De **itch.io** (homebrew):
+From **itch.io** (homebrew):
 
-| Juego | Captura | Estado |
-|-------|---------|--------|
-| **Shrimp Boom 004** | ![shrimpboom](assets/screenshots/shrimpboom.png) | ✅ Movimiento 4 direcciones, disparo, HUD, sonido (burbujas/pop/muerte) |
-| **Playdate Broken Screen** | ![playdatebrokenscreen](assets/screenshots/playdatebrokenscreen.png) | ✅ Imágenes `.pdi` decodificadas y dibujadas |
-| **Fishing Simulator** | ![fishing](assets/screenshots/fishing.png) | ✅ Menú, escena, sonido (catch/select/confirm) |
-| **Smolitaire 1.0.1** | ![smolitaire](assets/screenshots/smolitaire.png) | ✅ Menú, juego, cursor (mano) visible |
+| Game | Screenshot | Status |
+|------|------------|--------|
+| **Shrimp Boom 004** | ![shrimpboom](assets/screenshots/shrimpboom.png) | ✅ 4-direction movement, shooting, HUD, sound (bubbles/pop/death) |
+| **Playdate Broken Screen** | ![playdatebrokenscreen](assets/screenshots/playdatebrokenscreen.png) | ✅ `.pdi` images decoded and drawn |
+| **Fishing Simulator** | ![fishing](assets/screenshots/fishing.png) | ✅ Menu, scene, sound (catch/select/confirm) |
+| **Smolitaire 1.0.1** | ![smolitaire](assets/screenshots/smolitaire.png) | ✅ Menu, gameplay, visible cursor (hand) |
 
-Del **Playdate SDK** (compilados con `pdc`):
+From the **Playdate SDK** (compiled with `pdc`):
 
-| Juego | Captura | Estado |
-|-------|---------|--------|
-| **Flippy Fish** | ![flippyfish](assets/screenshots/flippyfish.png) | ✅ Pez animado, colisiones, score, suelo, algas |
-| **Sprite Collision Masks** | ![spritecollisionmasks](assets/screenshots/spritecollisionmasks.png) | ✅ Máscaras de colisión por grupos, rebotes, sprites sin salir del cuadro |
+| Game | Screenshot | Status |
+|------|------------|--------|
+| **Flippy Fish** | ![flippyfish](assets/screenshots/flippyfish.png) | ✅ Animated fish, collisions, score, floor, seaweed |
+| **Sprite Collision Masks** | ![spritecollisionmasks](assets/screenshots/spritecollisionmasks.png) | ✅ Group collision masks, bounces, sprites stay inside the box |
 
-## 🧰 Requisitos
+The game files themselves live in `games/` (see `.gitignore` — they are not
+committed to the repo). Download the `.pdx` from itch.io / the SDK and drop
+them there.
 
-- **Python 3.10+** (probado en 3.14)
-- **pygame-ce** `>=2.5` (el clásico `pygame` no sirve)
-- **lupa** `>=2.0` **enlazada contra Lua 5.4 con `LUA_32BITS`** — requisito
-  crítico (Playdate compila para una VM Lua de 32 bits). Ver
-  `docs/ARQUITECTURA.md`.
+## 🧰 Requirements
+
+- **Python 3.10+** (tested on 3.14)
+- **pygame-ce** `>=2.5` (the classic `pygame` won't do)
+- **lupa** `>=2.0` **linked against Lua 5.4 with `LUA_32BITS`** — a critical
+  requirement (Playdate compiles for a 32-bit Lua VM). See
+  `docs/ARCHITECTURE.md`.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **lupa + LUA_32BITS**: Playdate compila los `.pdz` para Lua de 32 bits
-> (floats `double`, offsets de 32 bits). lupa debe compilarse/enlazarse con esa
-> variante o los chunks compilados no cargan ni revientan. En el Mac de Alan ya
-> está el Python de Hermes con todo (`~/.hermes/tools/python-3.14*/bin/python3`).
+> **lupa + LUA_32BITS**: Playdate compiles `.pdz` for 32-bit Lua (floats are
+> `double`, but offsets are 32-bit). lupa must be compiled/linked with that
+> variant, or compiled chunks won't load and crash. The vendored source is in
+> `vendor/lupa/` and `tools/build_lua32.sh` builds it. (On Alan's Mac,
+> Hermes's Python at `~/.hermes/tools/python-3.14*/bin/python3` already has
+> everything set up.)
 
-## ▶️ Cómo ejecutar
-
-```bash
-python playdate_pi.py "ruta/al/juego.pdx" [--scale 2] [--palette device|bw|yellow] [--frames N] [--verbose]
-```
-
-Ejemplos:
+## ▶️ How to run
 
 ```bash
-python playdate_pi.py shrimpboom004.pdx --scale 3
-python playdate_pi.py "Fishing Simulator.pdx" --palette device
-python playdate_pi.py FlippyFish.pdx --frames 400     # headless (test)
-python playdate_pi.py shrimpboom004.pdx --verbose       # logs API/assets
+python playdate_pi.py "games/<game>.pdx" [--scale 2] [--palette device|bw|yellow] [--frames N] [--verbose]
 ```
 
-### Controles (equivalen al D-pad + 2 botones + manivela)
+Examples:
 
-| Tecla | Acción |
-|-------|--------|
-| Flechas / WASD | D-pad |
-| X / ESPACIO | Botón A (derecho) |
-| Z / SHIFT | Botón B (izquierdo) |
-| Q / E | Manivela (antihorario / horario) |
-| ESC | Salir |
+```bash
+python playdate_pi.py games/shrimpboom004.pdx --scale 3
+python playdate_pi.py "games/Fishing Simulator.pdx" --palette device
+python playdate_pi.py games/FlippyFish.pdx --frames 400   # headless (test)
+python playdate_pi.py games/shrimpboom004.pdx --verbose     # log API/assets
+```
 
-## 🏗️ Cómo funciona (mapa de arquitectura)
+### Controls (map to D-pad + 2 buttons + crank)
 
-Cuatro capas transforman el `.pdx` compilado en píxeles y audio. Cada una tiene
-su sección en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) con esquemas.
+| Key | Action |
+|-----|--------|
+| Arrows / WASD | D-pad |
+| X / SPACE | A button (right) |
+| Z / SHIFT | B button (left) |
+| Q / E | Crank (counter-clockwise / clockwise) |
+| ESC | Quit |
+
+## 🏗️ How it works (architecture map)
+
+Four layers turn the compiled `.pdx` into pixels and audio. Each has its own
+section in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) with diagrams.
 
 ```text
-┌────────────────────────────────────────────────────────────┐
-│ 1. CARGA DE JUEGO   — descomprime y parsea el .pdx (.pdz,  │  pd/pdx.py
-│    .pdi, .pft, .pda, pdxinfo) y resuelve assets            │
-├────────────────────────────────────────────────────────────┤
-│ 2. INTERPRETACIÓN   — lupa ejecuta los chunks Lua 5.4 de   │  pd/luavm.py
-│    32 bits; el juego pide la API vía playdate.*            │
-├────────────────────────────────────────────────────────────┤
-│ 3. API EN PYTHON    — se construye la tabla playdate.*     │  pd/runtime.py
-│    ({graphics, sound, sprite, display, button, geometry})  │
-├────────────────────────────────────────────────────────────┤
-│ 4. WRAPPING         — objetos Playdate = userdata, tablas  │  pd/luaobj.py
-│    planas, metamétodos, callbacks, coord./patrones         │
-└────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ 1. GAME LOADING   — uncompress/parse the .pdx (.pdz, .pdi,  │  pd/pdx.py
+│    .pft, .pda, pdxinfo) and resolve assets                  │
+├─────────────────────────────────────────────────────────────┤
+│ 2. INTERPRETATION — lupa executes the Lua 5.4 32-bit chunks │  pd/luavm.py
+│    ; the game asks for the API via playdate.*               │
+├─────────────────────────────────────────────────────────────┤
+│ 3. PYTHON API     — the playdate.* table is built           │  pd/runtime.py
+│    ({graphics, sound, sprite, display, button, geometry})   │
+├─────────────────────────────────────────────────────────────┤
+│ 4. WRAPPING       — Playdate objects = userdata, flat       │  pd/luaobj.py
+│    tables, metamethods, callbacks, gotchas                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Síntesis de cada parte:
+Short version of each part:
 
-1. **Carga de juegos** — `.pdx` = carpeta con `main.pdz`, `.pdi/.pdt/.pft/.pda`
-   y `pdxinfo`. `pdz` = contenedor con chunks posiblemente comprimidos
-   (`FLAG_COMPRESSED=0x80`) o cifrados (`FLAG_ENCRYPTED=0x40000000`, no
-   soportado). Los assets se resuelven **ignorando la extensión**.
-2. **Interpretación** — `LuaRuntime` de lupa + `patch_lundump` para cargar
-   bytecode 32 bits. `playdate.update()` corre en corrutina (como la consola).
-3. **APIs** — el patrón: implementa el método en Python y regístralo en
-   `Runtime._build_api()`. Guía completa y herramientas en
-   `docs/IMPLEMENTANDO_APIS.md` (incluye `tools/api_coverage.py` y
-   `tools/headless_test.py`, que corren tu juego y listan qué API falta).
-4. **Wrapping** — los objetos Playdate se exponen como **userdata** (no tablas)
-   porque los juegos distinguen `type(v)=="userdata"`. Las tablas son **planas**
-   (funciones Python en hojas, nunca objetos anidados). Metamétodos Lua reales
-   para operadores (`polygon * transform`, `imagetable[i]`, defaults de
-   `sprite:update()`). Jugadas de lupa documentadas en `ARQUITECTURA.md`.
+1. **Game loading** — `.pdx` is a folder with `main.pdz`, `.pdi/.pdt/.pft/.pda`
+   and `pdxinfo`. `pdz` is a container with chunks that may be compressed
+   (`FLAG_COMPRESSED=0x80`) or encrypted (`FLAG_ENCRYPTED=0x40000000`, not
+   supported). Assets are resolved **ignoring the extension**.
+2. **Interpretation** — a lupa `LuaRuntime` plus `patch_lundump` loads 32-bit
+   bytecode. `playdate.update()` runs in a coroutine (like the console).
+3. **APIs** — the pattern: implement the method in Python and register it in
+   `Runtime._build_api()`. Full guide and tooling in
+   `docs/IMPLEMENTING_APIS.md` (including `tools/api_coverage.py` and
+   `tools/headless_test.py`, which run your game and list the missing API).
+4. **Wrapping** — Playdate objects are exposed as **userdata** (not tables)
+   because games check `type(v)=="userdata"`. Tables are **flat** (Python
+   functions on the leaves, never nested objects). Real Lua metamethods for
+   operators (`polygon * transform`, `imagetable[i]`, `sprite:update()`
+   defaults). lupa gotchas documented in `ARCHITECTURE.md`.
 
-## 📁 Estructura del proyecto
+## 📁 Project structure
 
 ```text
 playdate_pi/
@@ -120,73 +127,74 @@ playdate_pi/
 ├── requirements.txt
 ├── README.md
 ├── docs/
-│   ├── ARQUITECTURA.md     # esquemas por partes + wrapping + errores comunes
-│   ├── IMPLEMENTANDO_APIS.md  # patrón para añadir APIs + herramientas
-│   ├── JUEGO_COMPILADO.md  # .pdx compilado (LUA_32BITS, opcodes, import)
-│   └── PFT_FUENTES.md      # decodificación de fuentes .pft
-├── assets/screenshots/     # capturas de los juegos probados
-├── tools/                  # utilidades de depuración/cobertura de API
+│   ├── ARCHITECTURE.md     # per-component diagrams + wrapping + common bugs
+│   ├── IMPLEMENTING_APIS.md  # how to add APIs + tooling
+│   ├── COMPILED_GAMES.md  # compiled .pdx (LUA_32BITS, opcodes, import)
+│   └── PFT_FONTS.md      # .pft font decoding
+├── assets/screenshots/     # screenshots of the tested games
+├── games/                  # the .pdx games (gitignored)
+├── tools/                  # debug / API-coverage utilities
+├── vendor/lupa/            # vendored lupa source (for LUA_32BITS build)
 ├── pd/
-│   ├── pdx.py              # contenedor .pdz + formato
-│   ├── pdi.py pft.py pda.py  # decodificadores .pdi/.pft/.pda
-│   ├── luavm.py            # LuaRuntime (lupa, 32 bits)
-│   ├── runtime.py          # API playdate.* + bucle (update/draw)
-│   ├── graphics.py         # render (400x240, paletas 1-bit)
-│   ├── sprite.py           # sistema de sprites + colisiones/rebotes
-│   ├── sound.py            # audio (pygame.mixer) + synth ADSR
+│   ├── pdx.py              # .pdz container + format
+│   ├── pdi.py pft.py pda.py  # decoders for .pdi/.pft/.pda
+│   ├── luavm.py            # LuaRuntime (lupa, 32-bit)
+│   ├── runtime.py          # playdate.* API + loop (update/draw)
+│   ├── graphics.py         # rendering (400x240, 1-bit palettes)
+│   ├── sprite.py           # sprite system + collisions/bounces
+│   ├── sound.py            # audio (pygame.mixer) + ADSR synth
 │   ├── geometry.py image.py input.py screen.py emulator.py
 │   ├── luaobj.py filestore.py
-│   └── lib/                # puentes Lua (playdate_ext.lua, etc.)
+│   └── lib/                # Lua bridges (playdate_ext.lua, etc.)
 ```
 
-## ✅ Estado y limitaciones
+## ✅ Status and limitations
 
-**Funciona**: carga `pdz` sin cifrar; decodifica `.pdi/.pdt/.pft/.pda`; API de
+**Works**: loads unencrypted `pdz`; decodes `.pdi/.pdt/.pft/.pda`; API of
 `graphics`, `sound`, `sprite`, `geometry`, `display`, `button`, `file`.
-Colisiones por grupos/máscaras con `collisionResponse`. Audio `.pda` (PCM + IMA
-ADPCM) y synth (ruido/sawtooth/square/sine/triangle con ADSR y notas en tiempo
-absoluto del motor). Fondo/estado por el sistema de sprites con semántica de la
-consola real.
+Group/mask collisions with `collisionResponse`. Audio `.pda` (PCM + IMA ADPCM)
+and synth (noise/sawtooth/square/sine/triangle with ADSR and notes at absolute
+engine time). Background/appearance handled by the sprite system with real
+console semantics.
 
-**Limitaciones**: no cifrado (Catalog); `CoreLibs/assets/*` que no vienen en el
-`.pdx` emiten avisos; algunos efectos/APIs de `sound` (sequence, filters) son
-stubs permisivos. El puente lupa escribe campos Lua (nunca los lee con
-metamétodos por Corrutinas).
+**Limitations**: no encryption (Catalog); `CoreLibs/assets/*` that are not in
+the `.pdx` emit warnings; some `sound` effects/APIs (sequence, filters) are
+permissive stubs. The lupa bridge writes Lua fields (it never reads fields
+that could pass through metamethods because coroutines).
 
-## 🤝 Contribuir / avanzar juntos
+## 🤝 Contribute / move forward together
 
-Está diseñado para que otros desarrolladores lo extiendan. Para añadir una API o
-corregir fidelidad: lee `docs/ARQUITECTURA.md` y `docs/IMPLEMENTANDO_APIS.md`,
-sigue los patrones (método Python + registro en `_build_api()`, userdata,
-tablas planas, callbacks) y registra la lección aprendida. Los juegos de la
-lista son buenos casos de regresión (el runner `tools/headless_test.py` pisa
-cada juego y reporta el primer error).
+It is designed so other developers can extend it. To add an API or fix
+fidelity: read `docs/ARCHITECTURE.md` and `docs/IMPLEMENTING_APIS.md`, follow
+the patterns (Python method + registration in `_build_api()`, userdata, flat
+tables, callbacks) and record the lesson learned. The games in the list are
+good regression cases (the `tools/headless_test.py` runner steps every game
+and reports the first error).
 
-## ⚠️ Jugadas clave descubiertas (resumen)
+## ⚠️ Key discoveries (summary)
 
-1. **lupa no mapea `__mul__`** de Python a metamétodos Lua: usar
-   `debug.setmetatable` con una función **Lua** (no Python) como `__index`.
-2. **Los objetos Playdate deben ser userdata**, no tablas: los juegos
-   distinguen `type(v)=="userdata"` y si es `"table"` toman la rama equivocada.
-3. **`sprite.update()` / fondo**: los sprites solo se dibujan si el JUEGO llama
-   a `sprite.update()` (semántica de la consola); el fondo = color o
+1. **lupa does not map Python `__mul__` to Lua metamethods**: use
+   `debug.setmetatable` with a **Lua** function (not Python) as `__index`.
+2. **Playdate objects must be userdata**, not tables: games check
+   `type(v)=="userdata"`, and if it is `"table"` they take the wrong branch.
+3. **`sprite.update()` / background**: sprites are only drawn if the GAME
+   calls `sprite.update()` (console semantics); foreground = color or
    `background_cb`.
-4. **Color**: `kColorBlack=0` (tinta), `kColorWhite=1` (papel); `setColor` debe
-   interpretar literales `0x000000`/`0xffffff`, no solo booleans.
-5. **Audio**: `synth:playNote(freq, vol, length, when)` usa `when` **absoluto**
-   (segundos desde que arrancó el motor, no relativo); default de la onda =
-   **ruido**. `.pda` incluye IMA ADPCM.
-6. **Cursor/hand**: las imágenes 1-bit con relleno por papel (`bit=1`) son
-   invisibles sobre fondo claro; dibujar en tinta cuando el sprite es
-   predominantemente papel.
+4. **Color**: `kColorBlack=0` (ink), `kColorWhite=1` (paper); `setColor` must
+   interpret literals `0x000000`/`0xffffff`, not only booleans.
+5. **Audio**: `synth:playNote(freq, vol, length, when)` uses `when` **absolute**
+   (seconds since the audio engine started, not relative); default waveform =
+   **noise**. `.pda` includes IMA ADPCM.
+6. **Cursor/hand**: 1-bit images filled with paper (`bit=1`) are invisible on
+   a light background; draw in ink when the sprite is predominantly paper.
 
-Cada una está detallada (causa + fix) en `docs/ARQUITECTURA.md`.
+Each is detailed (cause + fix) in `docs/ARCHITECTURE.md`.
 
-## Licencia
+## License
 
-*(elige la que prefieras — sugerencia: MIT)*
+*(pick whichever you prefer — suggestion: MIT)*
 
 ---
 
-Construido con el [Playdate SDK](https://play.date/dev/), [lupa](https://github.com/scoder/lupa)
-y [pygame-ce](https://pyga.me/).
+Built with the [Playdate SDK](https://play.date/dev/), [lupa](https://github.com/scoder/lupa)
+and [pygame-ce](https://pyga.me/).

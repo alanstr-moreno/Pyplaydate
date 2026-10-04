@@ -1,11 +1,11 @@
-# Dependencias de playdate-pi — emulador de Playdate en Python
+# playdate-pi dependencies — Playdate emulator in Python
 
-# Motor gráfico/audio (pygame-ce para Python moderno; pygame-clásico no basta).
+# Graphics/audio engine (pygame-ce for modern Python; classic pygame is not enough).
 pygame-ce>=2.5.0
 
-# Puente Lua-Python. DEBE compilarse/enlazarse contra Lua 5.4 con LUA_32BITS
-# (la consola Playdate usa enteros/pointers de 32 bits; sin esto los .pdz
-# compilados no cargan). Ver docs/ARQUITECTURA.md -> "Wrapping en Python".
+# Lua-Python bridge. MUST be compiled/linked against Lua 5.4 with LUA_32BITS
+# (the Playdate console uses 32-bit ints/pointers; without this, compiled .pdz
+# won't load). See docs/ARCHITECTURE.md -> "Python wrapping".
 lupa>=2.0
 
-# Resto: solo la librería estándar de Python (zlib para la descompresión, etc.)
+# Everything else is Python's standard library (zlib for decompression, etc.)
