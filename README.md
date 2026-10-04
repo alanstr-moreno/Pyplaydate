@@ -13,6 +13,33 @@ runs the same on your Mac and on a Raspberry Pi Zero 2 W.
 > It works with **homebrew / itch.io unencrypted games** and SDK examples.
 > Encrypted Catalog games (`bit 0x40000000`) are not executed.
 
+## Quick start (no Playdate SDK, no console needed)
+
+You do **not** need the Playdate SDK, a Playdate console, or any game source
+code. Just install the Python requirements and run a compiled `.pdx`:
+
+```bash
+# 1. Install the requirements (Python 3.10+)
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Build the Lua 5.4 / 32-bit bridge (one time; see note below)
+sh tools/build_lua32.sh
+
+# 3. Run a compiled game
+python playdate_pi.py "games/<game>.pdx" --scale 3
+```
+
+That's it. Drop any unencrypted `.pdx` (from itch.io, homebrew, or the SDK
+examples) into `games/` and run it. The emulator decodes the compiled formats
+and reimplements the `playdate.*` API itself — the SDK is only needed if you
+want to *compile* your own games, not to run them.
+
+> **Why step 2?** Playdate compiles `.pdz` for a 32-bit Lua VM. The standard
+> `pip install lupa` cannot load that bytecode, so the repo vendors the lupa
+> source (`vendor/lupa/`) and `tools/build_lua32.sh` builds it against Lua 5.4
+> with `LUA_32BITS`. It is a one-time build (macOS or Linux, including the Pi).
+
 ## Tested games
 
 From **itch.io** (homebrew):

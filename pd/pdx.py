@@ -1,16 +1,16 @@
-"""pdx.py — lector (y escritor de test) del formato COMPILADO de Playdate.
+"""pdx.py — reader (and test writer) of the COMPILED Playdate format.
 
-Un juego de verdad NO se distribuye como `main.lua`: se distribuye como un
-bundle `.pdx` (carpeta) que contiene:
+A real game is NOT distributed as `main.lua`: it is distributed as a `.pdx`
+bundle (folder) that contains:
 
-    MiJuego.pdx/
-        pdxinfo          -- metadatos (key=value)
-        main.pdz         -- contenedor con el bytecode Lua compilado (+ assets)
-        pdex.bin | pdex.elf   -- codigo nativo (juegos en C)
-        *.pdi  *.pft  *.pda   -- assets ya compilados (imagenes/fuentes/audio)
+    MyGame.pdx/
+        pdxinfo          -- metadata (key=value)
+        main.pdz         -- container with the compiled Lua bytecode (+ assets)
+        pdex.bin | pdex.elf   -- native code (C games)
+        *.pdi  *.pft  *.pda   -- already-compiled assets (images/fonts/audio)
 
-El `.pdz` es un contenedor: cabecera `Playdate PDZ` + flags, y luego entradas
-(bytecode Lua, imagenes .pdi, font .pft, audio .pda, ...).
+The `.pdz` is a container: `Playdate PDZ` header + flags, then entries
+(Lua bytecode, .pdi images, .pft font, .pda audio, ...).
 
 Spec: github.com/cranksters/playdate-reverse-engineering (formats/pdz.md)
 """
@@ -21,8 +21,8 @@ import zlib
 
 PDZ_MAGIC = b"Playdate PDZ"
 
-FLAG_COMPRESSED = 0x80          # el dato de la entrada esta zlib-comprimido
-FLAG_ENCRYPTED = 0x40000000     # DRM (solo juegos de la Catalog/store)
+FLAG_COMPRESSED = 0x80          # the entry data is zlib-compressed
+FLAG_ENCRYPTED = 0x40000000     # DRM (only Catalog/store games)
 
 TYPE_NAMES = {
     0: "unknown", 1: "luac", 2: "pdi", 3: "pdt",
@@ -31,7 +31,7 @@ TYPE_NAMES = {
 TYPE_EXT = {
     1: ".luac", 2: ".pdi", 3: ".pdt", 4: ".pdv", 5: ".pda", 6: ".pds", 7: ".pft",
 }
-# extensiones de asset que pdc deja sueltas en el .pdx (fuera del .pdz)
+# asset extensions that pdc leaves loose in the .pdx (outside the .pdz)
 ASSET_EXTS = (".pdi", ".pdt", ".pft", ".pda", ".pds", ".pdv")
 
 
@@ -51,20 +51,20 @@ def _u32(b, o):
 # .pdz
 # ----------------------------------------------------------------------
 def parse_pdz(data):
-    """Lee un contenedor .pdz y devuelve {encrypted, flags, entries}.
+    """Reads a .pdz container and returns {encrypted, flags, entries}.
 
-    Cada entrada: {name, type, type_name, size, data, compressed, ...}
-    Lanza PDXError si no es un .pdz o si esta cifrado.
+    Each entry: {name, type, type_name, size, data, compressed, ...}
+    Raises PDXError if it is not a .pdz or if it is encrypted.
     """
     if data[:12] != PDZ_MAGIC:
-        raise PDXError("no es un .pdz (falta la cabecera 'Playdate PDZ')")
+        raise PDXError("not a .pdz (missing the 'Playdate PDZ' header)")
 
     flags = _u32(data, 12)
     encrypted = bool(flags & FLAG_ENCRYPTED)
     if encrypted:
         raise PDXError(
-            "este .pdz esta CIFRADO (DRM de la Catalog). No se puede descomprimir "
-            "ni ejecutar: el metodo de cifrado es propietario y no se conoce."
+            "this .pdz is ENCRYPTED (Catalog DRM). It cannot be decompressed or "
+            "run: the encryption method is proprietary and unknown."
         )
 
     pos = 16
@@ -77,17 +77,17 @@ def parse_pdz(data):
 
         end = data.find(b"\x00", pos)
         if end < 0:
-            raise PDXError("nombre de entrada sin terminador nulo")
+            raise PDXError("entry name without null terminator")
         name = data[pos:end].decode("utf-8", "replace")
         pos = end + 1
 
-        # padding para alinear a multiplo de 4
+        # padding to align to a multiple of 4
         while pos % 4:
             pos += 1
 
         etype = eflags & 0x7F
         extra = {}
-        if etype == 5:  # .pda -> sample rate + formato de audio
+        if etype == 5:  # .pda -> sample rate + audio format
             extra["sample_rate"] = _u24(data, pos)
             extra["audio_format"] = data[pos + 3]
             pos += 4
@@ -100,7 +100,7 @@ def parse_pdz(data):
             raw = zlib.decompress(raw[4:])
             if usize != len(raw):
                 raise PDXError(
-                    f"tamano descomprimido no coincide en '{name}' "
+                    f"decompressed size mismatch in '{name}' "
                     f"({usize} != {len(raw)})"
                 )
 
@@ -118,7 +118,7 @@ def parse_pdz(data):
 
 
 def build_pdz(entries, encrypted=False):
-    """ESCRITOR (solo para tests): entradas = [(name, type, data, compress)]."""
+    """WRITER (tests only): entries = [(name, type, data, compress)]."""
     out = bytearray(PDZ_MAGIC)
     out += struct.pack("<I", FLAG_ENCRYPTED if encrypted else 0)
     for name, etype, data, compress in entries:
@@ -153,10 +153,10 @@ def parse_pdxinfo(text):
 
 
 def read_pdx(path):
-    """Lee un bundle .pdx (carpeta) o un .pdz suelto.
+    """Reads a .pdx bundle (folder) or a loose .pdz.
 
-    Devuelve:
-      {"path", "name", "meta", "pdz": {nombre: parsed}, "assets": [(rel, size)]}
+    Returns:
+      {"path", "name", "meta", "pdz": {name: parsed}, "assets": [(rel, size)]}
     """
     if os.path.isfile(path) and path.endswith(".pdz"):
         with open(path, "rb") as f:
@@ -165,7 +165,7 @@ def read_pdx(path):
                 "pdz": {os.path.basename(path): parsed}, "assets": []}
 
     if not os.path.isdir(path):
-        raise PDXError(f"no existe o no es un .pdx/.pdz: {path}")
+        raise PDXError(f"does not exist or is not a .pdx/.pdz: {path}")
 
     name = os.path.basename(path.rstrip("/"))
     if name.endswith(".pdx"):
@@ -190,13 +190,13 @@ def read_pdx(path):
                 assets.append((rel, os.path.getsize(full)))
 
     if not pdz and not assets:
-        raise PDXError(f"'{path}' no parece un .pdx (sin .pdz ni assets)")
+        raise PDXError(f"'{path}' does not look like a .pdx (no .pdz or assets)")
 
     return {"path": path, "name": name, "meta": meta, "pdz": pdz, "assets": assets}
 
 
 def extract_pdx(path, outdir):
-    """Extrae el contenido de un .pdx a `outdir`. Devuelve la lista de rutas."""
+    """Extracts the contents of a .pdx to `outdir`. Returns the list of paths."""
     info = read_pdx(path)
     written = []
     for rel_pdz, parsed in info["pdz"].items():

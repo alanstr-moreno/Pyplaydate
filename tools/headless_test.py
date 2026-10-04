@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""headless_test.py — corre un juego N frames sin ventana y reporta el primer
-error Lua/Python con el frame exacto. Ideal para validar cada API que agregues.
+"""headless_test.py — runs a game N frames without a window and reports the first
+Lua/Python error with the exact frame. Ideal to validate each API you add.
 
-Uso:
+Usage:
     python tools/headless_test.py games/hello
     python tools/headless_test.py games/hello -n 300
     python tools/headless_test.py games/hello -n 120 --keys "10:A:8,40:Left:20"
-        # inyecta teclas: frame:boton:duración   (A, B, Up, Down, Left, Right)
+        # injects keys: frame:button:duration   (A, B, Up, Down, Left, Right)
     python tools/headless_test.py games/hello --save /tmp/frame.png
 """
 
@@ -76,8 +76,8 @@ def main(argv=None):
 
     if args.save:
         pygame.image.save(emu.screen.canvas, args.save)
-        print("frame guardado en", args.save)
-    print(f"OK: {args.frames} frames sin errores")
+        print("frame saved to", args.save)
+    print(f"OK: {args.frames} frames without errors")
     return 0
 
 

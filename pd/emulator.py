@@ -1,4 +1,4 @@
-"""emulator.py — inicializa pygame, carga el juego y corre el loop a 30 FPS."""
+"""emulator.py — initializes pygame, loads the game and runs the 30 FPS loop."""
 
 import os
 import sys
@@ -9,9 +9,9 @@ import pygame
 from . import screen as screen_mod
 from .runtime import Runtime
 
-# tecla pygame -> boton Playdate
-#   D-pad: flechas o WASD          A: X o ESPACIO          B: Z
-#   Manivela: Q / E (girar)        Salir: ESC
+# pygame key -> Playdate button
+#   D-pad: arrows or WASD          A: X or SPACE          B: Z
+#   Crank: Q / E (rotate)          Quit: ESC
 KEYMAP = {
     pygame.K_UP: "Up", pygame.K_DOWN: "Down",
     pygame.K_LEFT: "Left", pygame.K_RIGHT: "Right",
@@ -19,20 +19,20 @@ KEYMAP = {
     pygame.K_a: "Left", pygame.K_d: "Right",
     pygame.K_x: "A", pygame.K_SPACE: "A",
     pygame.K_z: "B",
-    pygame.K_LSHIFT: "B",              # zurdo: shift tambien es B
+    pygame.K_LSHIFT: "B",              # left-handed: shift is also B
 }
 
-# La manivela no es una tecla digital: girar 22.5 grados por frame mientras se
-# mantiene. Q = antihorario, E = horario.
+# The crank is not a digital key: rotate 22.5 degrees per frame while held.
+# Q = counter-clockwise, E = clockwise.
 CRANK_STEP = 22.5
 CRANK_KEYS = {pygame.K_q: -1, pygame.K_e: 1}
 
 CONTROLS = """\
-  flechas / WASD ......... D-pad
-  X o ESPACIO ........... A (boton derecho)
-  Z o SHIFT ............. B (boton izquierdo)
-  Q / E ................. manivela (antihorario / horario)
-  ESC ................... salir
+  arrows / WASD ......... D-pad
+  X or SPACE ........... A (right button)
+  Z or SHIFT ........... B (left button)
+  Q / E ................. crank (counter-clockwise / clockwise)
+  ESC ................... quit
 """
 
 
@@ -46,18 +46,18 @@ class Emulator:
         self.frame = 0
         self.running = False
         self.screen = screen_mod.Screen(palette=palette)
-        self.crank_angle = 0.0        # grados, fuente de verdad de la manivela
-        self._crank_dir = 0           # -1 / +1 mientras se mantiene Q o E
+        self.crank_angle = 0.0        # degrees, the crank's source of truth
+        self._crank_dir = 0           # -1 / +1 while Q or E is held
 
     def _resolve_game_dir(self):
-        # ruta directa: carpeta fuente, bundle .pdx o archivo .pdz
+        # direct path: source folder, .pdx bundle or .pdz file
         if os.path.exists(self.game_name):
             return os.path.abspath(self.game_name)
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidate = os.path.join(here, "games", self.game_name)
         if os.path.isdir(candidate):
             return candidate
-        raise SystemExit(f"No encuentro el juego '{self.game_name}'")
+        raise SystemExit(f"Game not found: '{self.game_name}'")
 
     def run(self, max_frames=None):
         if self.headless:
@@ -90,25 +90,25 @@ class Emulator:
                 elif e.type == pygame.KEYUP:
                     self._key(e.key, False)
 
-            # La manivela gira mientras se mantiene la tecla; el delta se avisa
-            # al juego una vez por frame, como hace la consola.
+            # The crank rotates while the key is held; the delta is reported to
+            # the game once per frame, like the console does.
             crank_delta = self._crank_dir * CRANK_STEP
             if crank_delta:
                 self.crank_angle += crank_delta
 
-            # Los errores del juego NO deben cerrar el emulador: se imprimen (con
-            # el frame) y se sigue dibujando la ultima pantalla. En la consola un
-            # error de script te devuelve al menu, nunca te apaga la ventana.
+            # Game errors must NOT close the emulator: they are printed (with
+            # the frame) and the last screen keeps being drawn. On the console a
+            # script error returns you to the menu, it never shuts the window.
             try:
                 runtime.call_update()
                 runtime.call_draw()
             except Exception as e:  # noqa: BLE001
-                print(f"[frame {self.frame}] error de juego: {type(e).__name__}: {str(e)[:120]}")
+                print(f"[frame {self.frame}] game error: {type(e).__name__}: {str(e)[:120]}")
             if crank_delta:
                 try:
                     runtime.call_crank(crank_delta, 0)
                 except Exception as e:  # noqa: BLE001
-                    print(f"[frame {self.frame}] error de crank: {str(e)[:120]}")
+                    print(f"[frame {self.frame}] crank error: {str(e)[:120]}")
             self.screen.render(win, self.scale)
             pygame.display.flip()
 

@@ -1,7 +1,7 @@
-"""filestore.py — playdate.file y playdate.datastore.
+"""filestore.py — playdate.file and playdate.datastore.
 
-Sandbox por juego: `<juego>/.pd_data/`. `file.open` devuelve un objeto File
-(userdata, ver pd/luaobj.py) con :read/:readline/:write/:seek/:tell/:close.
+Per-game sandbox: `<game>/.pd_data/`. `file.open` returns a File object
+(userdata, see pd/luaobj.py) with :read/:readline/:write/:seek/:tell/:close.
 """
 
 import json
@@ -27,7 +27,7 @@ class File(Permissive):
 
     def read(self, n=None):
         data = self._f.read() if n is None else self._f.read(int(n))
-        return data if data else None            # Playdate devuelve nil al EOF
+        return data if data else None            # Playdate returns nil at EOF
 
     def readline(self):
         line = self._f.readline()
@@ -72,7 +72,7 @@ class File(Permissive):
 
 
 class FileSystem:
-    """playdate.file, con raiz en el sandbox del juego."""
+    """playdate.file, rooted in the game sandbox."""
 
     def __init__(self, root):
         self.root = root
@@ -90,7 +90,7 @@ class FileSystem:
         try:
             return File(self._p(path), mode)
         except OSError:
-            return None, "no se pudo abrir"
+            return None, "could not open"
 
     def exists(self, path):
         return os.path.exists(self._p(path))
@@ -158,11 +158,11 @@ class FileSystem:
 
 
 class DataStore:
-    """playdate.datastore (un fichero fijo dentro del sandbox).
+    """playdate.datastore (a fixed file inside the sandbox).
 
-    La consola guarda los datastores como JSON: `read` DESERIALIZA y `write`
-    SERIALIZA. Devolver el texto crudo rompe al juego en cuanto lo indexa
-    (`attempt to index a string value`).
+    The console stores datastores as JSON: `read` DESERIALIZES and `write`
+    SERIALIZES. Returning the raw text breaks the game as soon as it indexes
+    it (`attempt to index a string value`).
     """
 
     def __init__(self, fs):
@@ -170,7 +170,7 @@ class DataStore:
 
     @staticmethod
     def _to_python(v, depth=0):
-        """Tabla Lua -> dict/list de Python (para poder serializar a JSON)."""
+        """Lua table -> Python dict/list (so it can be serialized to JSON)."""
         if depth > 8:
             return None
         if isinstance(v, (str, int, float, bool)) or v is None:
@@ -199,19 +199,19 @@ class DataStore:
             text = f.read()
         finally:
             f.close()
-        # File.read() abre en "rb" -> devuelve BYTES. Si no se decodifica, el
-        # json.loads nunca corre y esto devuelve un string (que el juego trata como
-        # "hay datos" y luego explota con "attempt to index a string value"). La
-        # causa del crash de Fishing Simulator en gameData.lua:28.
+        # File.read() opens in "rb" -> returns BYTES. If it is not decoded, the
+        # json.loads never runs and this returns a string (which the game treats
+        # as "there is data" and then explodes with "attempt to index a string
+        # value"). The cause of Fishing Simulator crash at gameData.lua:28.
         if isinstance(text, bytes):
             text = text.decode("utf-8", errors="replace")
         if isinstance(text, str):
             try:
                 return json.loads(text)
             except Exception:  # noqa: BLE001
-                # No-JSON = datastore corrupto -> nil, para que el juego lo trate
-                # como "sin datos". Un string es peor que nil: el juego hace
-                # `if not data then data = {} end` y un string es truthy.
+                # No-JSON = corrupt datastore -> nil, so the game treats it as
+                # "no data". A string is worse than nil: the game does
+                # `if not data then data = {} end` and a string is truthy.
                 return None
         return None
 

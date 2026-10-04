@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""patch_lundump.py — traduce los opcodes de Playdate al orden estandar de Lua 5.4.3
-AL CARGAR el bytecode (en lundump.c LoadCode).
+"""patch_lundump.py — translates Playdate opcodes to the standard Lua 5.4.3 order
+AT LOAD time (in lundump.c LoadCode).
 
-Playdate usa el enum de Lua 5.4 *beta*: LOADFALSE/LFALSESKIP/LOADTRUE estan al
-FINAL (81,82,83) y hay un hueco en 5; el resto va desplazado -2 respecto al
-5.4.3 final. Tocar el enum rompe la tabla de dispatch del VM, asi que en vez de
-eso traducimos los bytes al vuelo:
+Playdate uses the Lua 5.4 *beta* enum: LOADFALSE/LFALSESKIP/LOADTRUE are at the
+END (81,82,83) and there is a hole at 5; the rest is shifted -2 relative to
+final 5.4.3. Touching the enum breaks the VM dispatch table, so instead we
+translate the bytes on the fly:
 
-    opcode_estandar = pd_map[opcode_playdate]
+    standard_opcode = pd_map[playdate_opcode]
 
-Uso: python3 patch_lundump.py <dir_src_de_lua>
+Usage: python3 patch_lundump.py <lua_src_dir>
 """
 
 import os
@@ -20,13 +20,13 @@ def main(src):
     p = os.path.join(src, "lundump.c")
     C = open(p, encoding="utf-8").read()
     if "PLAYDATE_OPCODE_REMAP" in C:
-        print("ya estaba parcheado")
+        print("already patched")
         return
 
     m = [0] * 84
     for i in range(5):
         m[i] = i
-    m[5] = 0                              # hueco (no deberia aparecer)
+    m[5] = 0                              # hole (should not appear)
     for i in range(6, 81):
         m[i] = i + 2                      # LOADNIL..EXTRAARG  -> std 8..82
     m[81], m[82], m[83] = 5, 6, 7         # LOADFALSE/LFALSESKIP/LOADTRUE -> std 5..7
@@ -37,7 +37,7 @@ def main(src):
     table = "\n".join(rows)
 
     block = (
-        "  {  /* --- PLAYDATE_OPCODE_REMAP: traduce al enum estandar de 5.4.3 --- */\n"
+        "  {  /* --- PLAYDATE_OPCODE_REMAP: translate to the standard 5.4.3 enum --- */\n"
         "    static const unsigned char pd_map[84] = {\n"
         f"{table}\n"
         "    };\n"
@@ -54,10 +54,10 @@ def main(src):
     old = "  loadVector(S, f->code, n);\n}"
     new = "  loadVector(S, f->code, n);\n" + block + "}"
     if old not in C:
-        raise SystemExit("no encontre el cierre de loadCode")
+        raise SystemExit("could not find the end of loadCode")
     C = C.replace(old, new, 1)
     open(p, "w", encoding="utf-8").write(C)
-    print("lundump.c parcheado (remapeo de opcodes en loadCode)")
+    print("lundump.c patched (opcode remap in loadCode)")
 
 
 if __name__ == "__main__":

@@ -1,27 +1,27 @@
-"""sprite.py — playdate.graphics.sprite (lado Python).
+"""sprite.py — playdate.graphics.sprite (Python side).
 
-Los juegos NO usan sprites "de fabrica": su propio `CoreLibs/sprites` (viene
-compilado dentro del .pdz) es una capa Lua que llama a ESTA API C. Por eso hay
-que implementar exactamente lo que CoreLibs/sprites invoca.
+Games do NOT use "stock" sprites: their own `CoreLibs/sprites` (compiled inside
+the .pdz) is a Lua layer that calls THIS C API. That's why you must implement
+exactly what CoreLibs/sprites invokes.
 
-Modelo de posicion (Playdate):
-  * el sprite tiene un ANCLA (`center`), por defecto el centro de su imagen;
-  * `moveTo(x, y)` coloca el ancla en (x, y);
-  * el dibujo ocurre en `pos - center`.
+Position model (Playdate):
+  * the sprite has an ANCHOR (`center`), by default the center of its image;
+  * `moveTo(x, y)` places the anchor at (x, y);
+  * drawing happens at `pos - center`.
 
-El objeto Lua que ve el juego es un "handle" (tabla con `__id`, ver runtime.py).
-Se guarda `spr.handle` para poder leer campos que el juego agregue al sprite
-(p.ej. su propia funcion `:update()`).
+The Lua object the game sees is a "handle" (table with `__id`, see runtime.py).
+`spr.handle` is kept so we can read fields the game adds to the sprite
+(e.g. its own `:update()` function).
 """
 
 
 class Sprite:
     def __init__(self, image_obj=None, image_handle=None, size=None):
-        self.image_obj = image_obj          # PDImage (para el tamano)
-        self.image_handle = image_handle    # tabla Lua (para dibujar)
-        self.size = size                    # (w,h) si no hay imagen
-        self.pos = [0.0, 0.0]               # ancla en pantalla
-        self.center = None                  # ancla dentro de la imagen (None = centro)
+        self.image_obj = image_obj          # PDImage (for the size)
+        self.image_handle = image_handle    # Lua table (for drawing)
+        self.size = size                    # (w,h) if there is no image
+        self.pos = [0.0, 0.0]               # anchor on screen
+        self.center = None                  # anchor inside the image (None = center)
         self.z = 0
         self.visible = True
         self.updates_enabled = True
@@ -31,43 +31,43 @@ class Sprite:
         self.scale = 1
         self.tag = None
         self.opaque = False
-        self.collide = None                 # (x, y, w, h) relativo al sprite
+        self.collide = None                 # (x, y, w, h) relative to the sprite
         self.tilemap = None
         self.groups = 0
-        # Sistema de mascaras de colision (API real):
-        #   group_mask     = capas a las que PERTENECE el sprite  (setGroups/setGroupMask)
-        #   collides_mask  = capas CON las que choca              (setCollidesWithGroups...)
+        # Collision mask system (real API):
+        #   group_mask     = layers the sprite BELONGS to  (setGroups/setGroupMask)
+        #   collides_mask  = layers it COLLIDES with       (setCollidesWithGroups...)
         #   collision_response = 0 free / 1 bounce / 2 slide (kCollisionType*)
         self.group_mask = 0
         self.collides_mask = 0
         self.collision_response = 0
         self.collisions_enabled = True
-        self.handle = None                  # tabla Lua (back-ref)
+        self.handle = None                  # Lua table (back-ref)
         self.system = None
 
-    # --- geometria ------------------------------------------------------
+    # --- geometry ------------------------------------------------------
     def image_size(self):
         if self.image_obj is not None:
             return self.image_obj.getSize()
         return self.size or (0, 0)
 
     def center_offset(self):
-        """Ancla del sprite EN PIXELES.
+        """The sprite's anchor IN PIXELS.
 
-        OJO: `sprite:setCenter(x, y)` de Playdate toma FRACCIONES 0..1 del tamano
-        del sprite (0.5, 0.5 = el centro). Antes se guardaba la fraccion y se
-        restaba tal cual, como si fueran pixeles: todo lo que dibujaba un sprite
-        salia desplazado a la derecha y hacia abajo (media anchura / media altura).
-        Con eso el titulo del juego salia descentrado y los menus, fuera.
+        NOTE: Playdate's `sprite:setCenter(x, y)` takes FRACTIONS 0..1 of the
+        sprite size (0.5, 0.5 = the center). Before, the fraction was stored and
+        subtracted as-is, as if it were pixels: everything a sprite drew came out
+        shifted right and down (half width / half height). That made the game
+        title off-center and the menus out of place.
         """
         w, h = self.image_size()
         if self.center is not None:
             cx, cy = self.center
-            return (cx * w, cy * h)          # fraccion -> pixeles
-        return (w // 2, h // 2)              # por defecto: el centro
+            return (cx * w, cy * h)          # fraction -> pixels
+        return (w // 2, h // 2)              # default: the center
 
     def getCenter(self):
-        """Devuelve la fraccion (mismas unidades que setCenter)."""
+        """Returns the fraction (same units as setCenter)."""
         if self.center is not None:
             return self.center
         return (0.5, 0.5)
@@ -81,15 +81,15 @@ class Sprite:
         return (self.pos[0], self.pos[1])
 
     def sync_handle(self):
-        """Escribe `x`/`y` en el handle Lua. Llamar tras CADA movimiento.
+        """Writes `x`/`y` to the Lua handle. Call after EVERY movement.
 
-        Los juegos leen `sprite.x`/`sprite.y` como CAMPOS y calculan sobre ellos:
-        un juego real hace `plane:moveWithCollisions(plane.x + dx, plane.y + dy)`.
-        Si el campo se queda congelado, el delta se calcula SIEMPRE sobre la
-        posicion inicial y el sprite no avanza nunca — con el input llegando
-        perfectamente (parece que las flechas no funcionan, y si son las del
-        jugador, "no se mueve"). Escribir campos de tablas Lua desde Python es
-        seguro; lo peligroso es LEERLOS.
+        Games read `sprite.x`/`sprite.y` as FIELDS and compute on them: a real
+        game does `plane:moveWithCollisions(plane.x + dx, plane.y + dy)`. If the
+        field stays frozen, the delta is ALWAYS computed from the initial
+        position and the sprite never advances — with input arriving perfectly
+        (it looks like the arrows don't work, and if they are the player's,
+        "it doesn't move"). Writing Lua table fields from Python is safe; the
+        dangerous part is READING them.
         """
         h = self.handle
         if h is None:
@@ -138,16 +138,16 @@ class Sprite:
             self.scale = scale
 
     def bounds(self):
-        """Rectangulo (x, y, w, h) en coords de pantalla donde se dibuja la imagen."""
+        """Rectangle (x, y, w, h) in screen coords where the image is drawn."""
         w, h = self.image_size()
         cx, cy = self.center_offset()
         return (int(self.pos[0] - cx), int(self.pos[1] - cy), int(w), int(h))
 
     def alpha_collision(self, other):
-        """Colision a nivel de PIXEL (API sprite:alphaCollision): ademas de
-        intersectar los rectangulos, al menos un pixel no vacio de la imagen de
-        uno toca a otro. FlippyFish lo usa para decidir si el pez choco de verdad
-        con el suelo/la punta del alga (sin esto marcaba gameOver por aire).
+        """PIXEL-level collision (API sprite:alphaCollision): besides the
+        rectangles intersecting, at least one non-empty pixel of one image
+        touches the other. FlippyFish uses it to decide if the fish really hit
+        the floor/seaweed tip (without it, it flagged gameOver in mid-air).
         """
         ax, ay, aw, ah = self.bounds()
         bx, by, bw, bh = other.bounds()
@@ -158,8 +158,8 @@ class Sprite:
         a = getattr(self.image_obj, "surface", None)
         b = getattr(other.image_obj, "surface", None)
         if a is None or b is None:
-            return True   # sin datos de pixel: asumir opaco (bounds ya chocan)
-        # muestrear la interseccion: cualquier pixel con alpha no vacia en ambas
+            return True   # no pixel data: assume opaque (bounds already overlap)
+        # sample the intersection: any pixel with non-empty alpha in both
         for px in range(int(ox0), int(ox1), 2):
             for py in range(int(oy0), int(oy1), 2):
                 try:
@@ -171,7 +171,7 @@ class Sprite:
                     return True
         return False
 
-    # --- colisiones (AABB) ----------------------------------------------
+    # --- collisions (AABB) ----------------------------------------------
     def collide_rect_at(self, x, y):
         if self.collide is None:
             return None
@@ -182,12 +182,12 @@ class Sprite:
         return (int(tl_x + rx), int(tl_y + ry), int(rw), int(rh))
 
     def moveWithCollisions(self, gx, gy):
-        """Mueve resolviendo choques. Devuelve (x, y, colisiones) donde cada
-        colision es (otro_sprite, normal_x, normal_y).
+        """Moves resolving collisions. Returns (x, y, collisions) where each
+        collision is (other_sprite, normal_x, normal_y).
 
-        El `normal` NO es decorativo: los juegos lo usan para rebotar
-        (`if collision.normal.x ~= 0 then s.velocityX = -s.velocityX end`, asi lo
-        hace el ejemplo SpriteCollisionMasks). Sin el, el juego muere con
+        The `normal` is NOT decorative: games use it to bounce
+        (`if collision.normal.x ~= 0 then s.velocityX = -s.velocityX end`, as
+        the SpriteCollisionMasks example does). Without it, the game dies with
         "attempt to index a nil value (field 'normal')".
         """
         sys = self.system
@@ -207,10 +207,10 @@ class Sprite:
         self.pos[1] = ny
         self.sync_handle()
 
-        # Lista de colisiones: los contactos de ambos ejes (da igual si bloquearon
-        # o solo en Overlap). Un sprite que "atraviesa" (Overlap) tambien se
-        # reporta: FlippyFish marca la puntuacion/gameOver dentro de su
-        # collisionResponse, que ya se ejecuto en sprite_response_blocks.
+        # Collision list: the contacts of both axes (whether they blocked or
+        # only Overlap). A sprite that "passes through" (Overlap) is also
+        # reported: FlippyFish sets score/gameOver inside its collisionResponse,
+        # which already ran in sprite_response_blocks.
         cols = []
         seen = set()
         for other, blocked_x in ((hit_x, True), (hit_y, False)):
@@ -225,8 +225,8 @@ class Sprite:
                 if id(other) in seen:
                     continue
                 seen.add(id(other))
-                # efectos de la response aunque no bloquee (Overlap): el juego
-                # decide gameOver/puntuacion aqui, cada frame mientras se solapa.
+                # response effects even if it does not block (Overlap): the game
+                # decides gameOver/score here, every frame while overlapping.
                 sys.sprite_response_call(self, other)
                 ndx = -1.0 if other.pos[0] < self.pos[0] else 1.0
                 cols.append((other, ndx, 0.0))
@@ -234,15 +234,15 @@ class Sprite:
 
 
 class SpriteSystem:
-    """Lista global de sprites + fase de update/draw (playdate.graphics.sprite.*)."""
+    """Global sprite list + update/draw phase (playdate.graphics.sprite.*)."""
 
     def __init__(self, graphics, lua=None):
         self.g = graphics
-        self.lua = lua                     # el estado Lua, para los callbacks
+        self.lua = lua                     # the Lua state, for the callbacks
         self.sprites = []
         self.background_cb = None
 
-    # --- gestion --------------------------------------------------------
+    # --- management --------------------------------------------------------
     def new(self, image_obj=None, image_handle=None):
         s = Sprite(image_obj, image_handle)
         s.system = self
@@ -262,16 +262,16 @@ class SpriteSystem:
     def remove_all(self):
         self.sprites.clear()
 
-    # --- colisiones -----------------------------------------------------
+    # --- collisions -----------------------------------------------------
     def would_collide(self, spr, x, y):
-        """True si el sprite chocaria moviendose a (x, y).
+        """True if the sprite would collide moving to (x, y).
 
-        IMPORTANTE: se IGNORAN los sprites con los que YA esta solapando en su
-        posicion actual. Si no, un sprite que nace o acaba solapando algo (p.ej.
-        pegado a un muro) queda con TODOS sus movimientos bloqueados para
-        siempre: se congela en el sitio. Es el bug de "no todos se mueven" en
-        SpriteCollisionMasks. La consola real tambien permite salir de un solape
-        preexistente; solo bloquea las colisiones NUEVAS.
+        IMPORTANT: sprites it is ALREADY overlapping at its current position are
+        IGNORED. Otherwise a sprite that spawns or ends up overlapping something
+        (e.g. stuck against a wall) has ALL its movements blocked forever: it
+        freezes in place. That is the "not all of them move" bug in
+        SpriteCollisionMasks. The real console also lets you leave a pre-existing
+        overlap; it only blocks NEW collisions.
         """
         rect = spr.collide_rect_at(x, y)
         if rect is None:
@@ -280,10 +280,10 @@ class SpriteSystem:
         for other in self.sprites:
             if other is spr or not other.collisions_enabled:
                 continue
-            # Mascaras de colision: dos sprites chocan si la mascara de grupo de
-            # uno AND-eada con la de "choca con" del otro es distinta de cero.
-            # Sin este filtro un juego de capas (SpriteCollisionMasks) ve
-            # colisiones que no existen y su jugador rebota contra todo.
+            # Collision masks: two sprites collide if one's group mask
+            # AND-ed with the other's "collides with" mask is non-zero.
+            # Without this filter a layered game (SpriteCollisionMasks) sees
+            # collisions that don't exist and its player bounces off everything.
             if not _masks_collide(spr, other):
                 continue
             ore = other.collide_rect_at(other.pos[0], other.pos[1])
@@ -291,22 +291,22 @@ class SpriteSystem:
                 continue
             if not _aabb(rect, ore):
                 continue
-            # ¿ya estaba solapando? entonces este choque no es nuevo: no bloquea.
+            # already overlapping? then this hit is not new: it does not block.
             if here is not None and _aabb(here, ore):
                 continue
             return other
         return None
 
     def sprite_response_blocks(self, spr, other):
-        """Consulta la collisionResponse del sprite MOVIL y dice si el choque
-        con `other` BLOQUEA el movimiento.
+        """Asks the MOVING sprite's collisionResponse and says whether the hit
+        with `other` BLOCKS the movement.
 
-        moveWithCollisions en la consola real pregunta al sprite
-        `self:collisionResponse(other)` y respeta el kCollisionType que este
-        devuelve. FlippyFish sobreescribe el metodo para devolver SIEMPRE
-        Overlap (el pez ATRAVIESA las algas y la puntuacion/gameOver se deciden
-        en el propio callback); SpriteCollisionMasks pone collisionResponse =
-        kCollisionTypeBounce. Sin esto un juego no rebotaba ni puntuaba.
+        moveWithCollisions on the real console asks the sprite
+        `self:collisionResponse(other)` and respects the kCollisionType it
+        returns. FlippyFish overrides the method to ALWAYS return Overlap (the
+        fish PASSES THROUGH the seaweed and score/gameOver are decided in the
+        callback itself); SpriteCollisionMasks sets collisionResponse =
+        kCollisionTypeBounce. Without this a game neither bounced nor scored.
         """
         lua = self.lua
         OVERLAP = 2
@@ -316,18 +316,18 @@ class SpriteSystem:
             t = lua.eval("__pd_sprite_response_type")(spr.handle, other.handle)
         except Exception:
             t = None
-        return t != OVERLAP   # nil -> default Slide (bloquea)
+        return t != OVERLAP   # nil -> default Slide (blocks)
 
     def sprite_response_call(self, spr, other):
-        """Invoca la collisionResponse del sprite MOVIL ante `other` SOLO por sus
-        efectos (gameOver, puntuacion...), sin bloquear nada.
+        """Invokes the MOVING sprite's collisionResponse against `other` ONLY for
+        its effects (gameOver, score...), without blocking anything.
 
-        La consola llama a collisionResponse CADA FRAME mientras el sprite se
-        solapa (tipo Overlap). FlippyFish depende de eso: el pez cae 20px/frame,
-        asi que en el primer contacto sus pixeles aun no tocan el suelo
-        (alphaCollision=false) y gameOver solo se dispara en un frame posterior
-        mientras sigue solapado. Sin esta llamada continua, el pez atravesaba el
-        suelo y caia al vacio sin morir ni puntuar.
+        The console calls collisionResponse EVERY FRAME while the sprite
+        overlaps (Overlap type). FlippyFish depends on that: the fish falls
+        20px/frame, so on first contact its pixels don't touch the floor yet
+        (alphaCollision=false) and gameOver only fires on a later frame while
+        still overlapping. Without this continuous call, the fish passed through
+        the floor and fell into the void without dying or scoring.
         """
         lua = self.lua
         if lua is None or spr.handle is None or other.handle is None:
@@ -360,7 +360,7 @@ class SpriteSystem:
 
     # --- frame ----------------------------------------------------------
     def update(self):
-        """playdate.graphics.sprite.update(): actualiza y luego dibuja."""
+        """playdate.graphics.sprite.update(): updates and then draws."""
         for s in list(self.sprites):
             if not s.updates_enabled or s.handle is None:
                 continue
@@ -371,22 +371,23 @@ class SpriteSystem:
             self.draw_sprite(s)
 
     def _cb(self, which, s):
-        """Invoca un callback del sprite (update/draw) enteramente en Lua.
+        """Invokes a sprite callback (update/draw) entirely in Lua.
 
-        OJO: Graphics es Python puro y NO tiene estado Lua; el estado vive en el
-        Runtime, que se lo inyecta aqui.
+        NOTE: Graphics is pure Python and has NO Lua state; the state lives in
+        the Runtime, which injects it here.
 
-        Los errores NO se silencian: un callback que revienta deja el juego sin
-        dibujar nada (o sin logica) y el sintoma es invisible -- "el juego corre,
-        no da errores y no pinta nada". Se avisa una vez por mensaje distinto.
+        Errors are NOT silenced: a callback that crashes leaves the game drawing
+        nothing (or with no logic) and the symptom is invisible -- "the game runs,
+        gives no errors and draws nothing". It is reported once per distinct
+        message.
         """
         lua = self.lua
         if lua is None or s.handle is None:
             return
         try:
             if which == "__pd_sprite_draw_cb":
-                # f(sprite, x, y, w, h): el rect sucio. Pasamos los bounds del
-                # sprite (es lo que el callback del fondo necesita para su clip).
+                # f(sprite, x, y, w, h): the dirty rect. We pass the sprite's
+                # bounds (that's what the background callback needs for its clip).
                 try:
                     x, y = s.bounds()[0], s.bounds()[1]
                 except Exception:
@@ -398,13 +399,13 @@ class SpriteSystem:
                     w, hh = s.size if s.size else (0, 0)
                 except Exception:
                     w = hh = 0
-                # sprites.lua/C real: el callback `draw(s, x, y, w, h)` recibe el
-                # dirty rect en coordenadas RELATIVAS al sprite (0,0 = esquina
-                # sup. izq. del sprite) y con el TRANSLATE puesto en esa esquina,
-                # y el COLOR DE DIBUJO reseteado a tinta -- documentado en
-                # "Inside Playdate" (sprite:draw) y necesario para FlippyFish,
-                # cuyo Score:draw pinta el numero en (0,0) con el color global
-                # blanco que dejo el intro (blanco sobre blanco = invisible).
+                # real sprites.lua/C: the `draw(s, x, y, w, h)` callback receives
+                # the dirty rect in coordinates RELATIVE to the sprite (0,0 = the
+                # sprite's top-left corner) with the TRANSLATE set to that corner,
+                # and the DRAW COLOR reset to ink -- documented in
+                # "Inside Playdate" (sprite:draw) and needed for FlippyFish,
+                # whose Score:draw paints the number at (0,0) with the global
+                # white color left by the intro (white on white = invisible).
                 g = self.g
                 tx0, ty0 = g._tx, g._ty
                 col0 = g._color
@@ -434,12 +435,12 @@ class SpriteSystem:
         return None
 
     def draw_sprite(self, s):
-        # La mano del cursor (pointer 24x24) es PREDOMINANTEMENTE PAPEL (blanca,
-        # bit=1): al dibujarla tal cual es invisible sobre el tablero claro del
-        # juego (la mano de Smolitaire tiene 293 blancos + 97 negros). El original
-        # la muestra sobre un fondo oscuro que aqui no se pinta. Se dibuja en
-        # TINTA (todos los opacos oscuros) para que sea la mano visible que el
-        # usuario espera ("una mano con el indice apuntando a la derecha").
+        # The cursor hand (pointer 24x24) is PREDOMINANTLY PAPER (white, bit=1):
+        # drawn as-is it is invisible on the game's light board (Smolitaire's
+        # hand has 293 whites + 97 blacks). The original shows it on a dark
+        # background that is not drawn here. It is drawn in INK (all opaque
+        # pixels dark) so it is the visible hand the user expects ("a hand with
+        # the index finger pointing right").
         if s.image_handle is not None and s.flip == 0:
             im = getattr(s.image_obj, "surface", None)
             if im is not None:
@@ -464,9 +465,9 @@ class SpriteSystem:
                         self.g.setDrawOffset(*saved)
                         return
         if s.image_handle is None:
-            # SIN IMAGEN: el sprite solo puede pintarse por su callback `draw`,
-            # que es como los juegos dibujan cursores, menus y efectos. Antes se
-            # salia aqui y esos sprites eran invisibles.
+            # NO IMAGE: the sprite can only be drawn by its `draw` callback,
+            # which is how games draw cursors, menus and effects. Before it
+            # returned here and those sprites were invisible.
             self._cb("__pd_sprite_draw_cb", s)
             return
         if s.ignores_offset:
@@ -479,12 +480,12 @@ class SpriteSystem:
 
 
 def _masks_collide(a, b):
-    """True si los grupos de `a` y `b` dicen que pueden chocar.
+    """True if the groups of `a` and `b` say they can collide.
 
-    Regla de la API: chocan si (group_mask de uno) AND (collides_mask del otro)
-    es != 0 en cualquiera de los dos sentidos. Si NINGUNO de los dos tiene
-    mascaras puestas (0/0) se permite el choque: es el caso por defecto de un
-    juego que no usa el sistema de grupos.
+    API rule: they collide if (one's group_mask) AND (the other's collides_mask)
+    is != 0 in either direction. If NEITHER has masks set (0/0) the collision is
+    allowed: that is the default case for a game that does not use the group
+    system.
     """
     am, ac = getattr(a, "group_mask", 0) or 0, getattr(a, "collides_mask", 0) or 0
     bm, bc = getattr(b, "group_mask", 0) or 0, getattr(b, "collides_mask", 0) or 0
@@ -494,10 +495,10 @@ def _masks_collide(a, b):
 
 
 def _groups_to_mask(groups):
-    """`setGroups({2,3})` -> mascara. El grupo N ocupa el bit N-1 (1<<(N-1)).
+    """`setGroups({2,3})` -> mask. Group N occupies bit N-1 (1<<(N-1)).
 
-    El ejemplo oficial lo dice: `setGroups({2})` equivale a `setGroupMask(2)` y
-    `setCollidesWithGroups({3})` a `setCollidesWithGroupsMask(4)`.
+    The official example says it: `setGroups({2})` equals `setGroupMask(2)` and
+    `setCollidesWithGroups({3})` equals `setCollidesWithGroupsMask(4)`.
     """
     mask = 0
     try:

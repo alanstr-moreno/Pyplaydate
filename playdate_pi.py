@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""playdate_pi — corre un juego de Playdate (Lua) en pygame.
+"""playdate_pi — runs a Playdate game (Lua) on pygame.
 
-Uso:
-    python playdate_pi.py hello            # corre games/hello
-    python playdate_pi.py hello --scale 3  # ventana 3x
-    python playdate_pi.py hello --frames 60 # headless, 60 frames (para tests)
+Usage:
+    python playdate_pi.py hello            # runs games/hello
+    python playdate_pi.py hello --scale 3  # 3x window
+    python playdate_pi.py hello --frames 60 # headless, 60 frames (for tests)
 
-En la Raspberry Pi Zero 2 W usa el mismo comando (pygame ya funciona alli).
+On the Raspberry Pi Zero 2 W the same command works (pygame already runs there).
 """
 
 import argparse
@@ -16,19 +16,19 @@ from pd.emulator import Emulator
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Emulador de Playdate sobre pygame")
-    ap.add_argument("game", help="nombre del juego en games/ (o una ruta a un dir)")
-    ap.add_argument("--scale", type=int, default=2, help="factor de escala de la ventana")
+    ap = argparse.ArgumentParser(description="Playdate emulator on pygame")
+    ap.add_argument("game", help="game name in games/ (or a path to a dir)")
+    ap.add_argument("--scale", type=int, default=2, help="window scale factor")
     ap.add_argument("--palette", default="device",
                     choices=["device", "bw", "yellow"],
-                    help="colores de pantalla: device (Memory LCD), bw (negro/blanco "
-                         "puro, como pide Panic para capturas) o yellow")
-    ap.add_argument("--fps", type=int, default=30, help="frames por segundo de Playdate")
+                    help="screen colors: device (Memory LCD), bw (pure black/white, "
+                         "as Panic asks for Catalog captures) or yellow")
+    ap.add_argument("--fps", type=int, default=30, help="Playdate frames per second")
     ap.add_argument("--frames", type=int, default=None,
-                    help="salir tras N frames (headless, para pruebas)")
+                    help="exit after N frames (headless, for tests)")
     ap.add_argument("--verbose", action="store_true",
-                    help="mostrar los `print` del juego y avisar de assets que faltan "
-                         "(por defecto la consola se queda limpia)")
+                    help="show the game's `print`s and warn about missing assets "
+                         "(by default the console stays clean)")
     args = ap.parse_args(argv)
 
     emu = Emulator(args.game, scale=args.scale, fps=args.fps,

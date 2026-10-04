@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""find_missing_api.py — corre un juego y reporta QUE APIs de Playdate le faltan
-al emulador, aislando errores para descubrir muchas de una sola pasada.
+"""find_missing_api.py — runs a game and reports which Playdate APIs the emulator
+is missing, isolating errors to discover many in a single pass.
 
-Es la herramienta para saber que implementar a continuacion, en vez de arreglar
-un "attempt to index a nil value" por vez.
+It is the tool to know what to implement next, instead of fixing one
+"attempt to index a nil value" at a time.
 
-Uso:
+Usage:
     python tools/find_missing_api.py smolitaire-1.0.1.pdx
     python tools/find_missing_api.py smolitaire-1.0.1.pdx -n 300
-    python tools/find_missing_api.py games/hello          # tambien en modo fuente
+    python tools/find_missing_api.py games/hello          # also in source mode
 """
 
 import argparse
@@ -39,7 +39,7 @@ def main(argv=None):
 
     rt = Runtime(emu)
     emu._button = rt.playdate.button
-    rt.on_ready = apidbg.install          # rastrea desde el arranque del juego
+    rt.on_ready = apidbg.install          # track from the game boot
 
     load_error = None
     try:
@@ -48,7 +48,7 @@ def main(argv=None):
         load_error = f"{type(e).__name__}: {e}"
 
     safe = apidbg.safe_caller(rt)
-    clock = pygame.time.Clock()            # pacing REAL: los timers miden tiempo real
+    clock = pygame.time.Clock()            # REAL pacing: timers measure real time
     for _ in range(args.frames):
         pygame.event.pump()
         safe(rt.playdate._update_cb)
@@ -61,24 +61,24 @@ def main(argv=None):
 
     missing, errors = apidbg.report(rt)
 
-    print(f"Juego: {args.game}   frames: {args.frames}")
+    print(f"Game: {args.game}   frames: {args.frames}")
     if load_error:
-        print(f"\n[!] error al cargar/arrancar: {load_error[:160]}")
+        print(f"\n[!] error loading/booting: {load_error[:160]}")
 
-    print(f"\n=== APIs FALTANTES ({len(missing)}) — esto es lo que hay que implementar ===")
+    print(f"\n=== MISSING APIs ({len(missing)}) — this is what to implement ===")
     if not missing:
-        print("  (ninguna: el emulador cubre lo que el juego toco)")
+        print("  (none: the emulator covers what the game touched)")
     groups = apidbg.api_suggestions(missing)
     for key in sorted(groups, key=lambda k: -sum(c for _, c in groups[k])):
         print(f"\n  {key}")
         for path, count in groups[key][:14]:
             print(f"      {path:52s} x{count}")
         if len(groups[key]) > 14:
-            print(f"      ... y {len(groups[key]) - 14} mas")
+            print(f"      ... and {len(groups[key]) - 14} more")
 
-    print(f"\n=== ERRORES AISLADOS ({len(errors)}) ===")
+    print(f"\n=== ISOLATED ERRORS ({len(errors)}) ===")
     if not errors:
-        print("  (ninguno)")
+        print("  (none)")
     for msg, count in sorted(errors.items(), key=lambda x: -x[1])[:15]:
         print(f"  x{count:<3d} {msg[:150]}")
     return 0

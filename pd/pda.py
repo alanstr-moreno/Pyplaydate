@@ -1,18 +1,18 @@
-"""pda.py — decodificador de audio .pda de Playdate.
+"""pda.py — Playdate .pda audio decoder.
 
-Formato (cranksters/playdate-reverse-engineering/formats/pda.md):
+Format (cranksters/playdate-reverse-engineering/formats/pda.md):
   offset 0   : "Playdate AUD" (12 bytes)
   offset 12  : uint24 sample rate (Hz)
-  offset 15  : uint8  formato
-  offset 16  : datos de audio
+  offset 15  : uint8  format
+  offset 16  : audio data
 
-Formatos:
+Formats:
   0 = 8-bit mono PCM (unsigned)    1 = 8-bit stereo PCM
   2 = 16-bit mono PCM (signed LE)  3 = 16-bit stereo PCM
   4 = 4-bit IMA ADPCM mono         5 = 4-bit IMA ADPCM stereo
 
-Devuelve (rate, samples) donde samples es una lista de floats en [-1, 1]
-(mono: se mezclan los canales).
+Returns (rate, samples) where samples is a list of floats in [-1, 1]
+(mono: the channels are mixed).
 """
 
 import struct
@@ -30,23 +30,23 @@ _IMA_INDEX = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8]
 
 
 def _adpcm_decode(data, channels):
-    """Decodifica IMA ADPCM. Devuelve lista de floats mono (mezclada)."""
+    """Decodes IMA ADPCM. Returns a list of mono floats (mixed)."""
     block_size = struct.unpack_from("<H", data, 0)[0]
     pos = 2
-    # estado por canal
+    # per-channel state
     pred = [0] * channels
     idx = [0] * channels
     out = []
     n = len(data)
     while pos < n:
-        # cabecera de bloque: 4 bytes por canal
+        # block header: 4 bytes per channel
         for c in range(channels):
             if pos + 4 > n:
                 return out
             pred[c] = struct.unpack_from("<h", data, pos)[0]
             idx[c] = data[pos + 2]
             pos += 4
-        # nibbles: estéreo -> canal 0 = nibble alto, canal 1 = nibble bajo
+        # nibbles: stereo -> channel 0 = high nibble, channel 1 = low nibble
         while pos < n and (pos - 2) % block_size != 0:
             byte = data[pos]
             pos += 1
@@ -77,9 +77,9 @@ def _adpcm_decode(data, channels):
 
 
 def decode_pda(data):
-    """Decodifica un .pda. Devuelve (rate, samples_float_mono)."""
+    """Decodes a .pda. Returns (rate, samples_float_mono)."""
     if data[:12] != b"Playdate AUD":
-        raise ValueError("no es un .pda valido")
+        raise ValueError("not a valid .pda")
     rate = int.from_bytes(data[12:15], "little")
     fmt = data[15]
     body = data[16:]
@@ -104,5 +104,5 @@ def decode_pda(data):
     elif fmt == 5:    # ADPCM stereo
         samples = _adpcm_decode(body, 2)
     else:
-        raise ValueError(f"formato .pda desconocido: {fmt}")
+        raise ValueError(f"unknown .pda format: {fmt}")
     return (rate, samples)

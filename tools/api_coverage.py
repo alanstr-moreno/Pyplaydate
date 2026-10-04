@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""api_coverage.py — escanea los .lua de un juego y reporta qué API de Playdate
-usa que el emulador TODAVÍA NO implementa.
+"""api_coverage.py — scans a game .lua files and reports which Playdate API it
+uses that the emulator does NOT implement yet.
 
-Uso:
+Usage:
     python tools/api_coverage.py games/hello
-    python tools/api_coverage.py /ruta/a/juego --all      # muestra tambien lo implementado
+    python tools/api_coverage.py /path/to/game --all      # also shows what is implemented
 
-Idea: en vez de adivinar qué funciones faltan, dejas que el juego te lo diga.
-Implementa primero lo que TU juego objetivo realmente llama.
+Idea: instead of guessing which functions are missing, let the game tell you.
+Implement first what YOUR target game actually calls.
 """
 
 import os
@@ -27,7 +27,7 @@ from pd.runtime import Runtime  # noqa: E402
 
 
 class _Dummy:
-    """Emulador minimo solo para construir la API."""
+    """Minimal emulator just to build the API."""
 
     def __init__(self):
         self.game_name = "scan"
@@ -56,7 +56,7 @@ def implemented_paths():
     return out
 
 
-# Captura:  playdate.a.b   |   gfx.a.b  |  gfx:a  |  playdate.graphics:sprite.new
+# Captures:  playdate.a.b   |   gfx.a.b  |  gfx:a  |  playdate.graphics:sprite.new
 RE_CALL = re.compile(
     r"\b(playdate|gfx|graphics)"
     r"((?:[.:][A-Za-z_]\w*)+)"
@@ -74,11 +74,11 @@ def used_paths(folder):
                 src = open(p, encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
-            # quitar comentarios
+            # strip comments
             src = re.sub(r"--\[\[.*?\]\]", " ", src, flags=re.S)
             src = re.sub(r"--[^\n]*", " ", src)
 
-            # nombres que el juego DEFINE (no son APIs que falten):
+            # names the game DEFINES (not missing APIs):
             #   function playdate.update() ... end   |   playdate.draw = function() end
             defs = set()
             for d in re.findall(r"\bfunction\s+(playdate(?:[.:][A-Za-z_]\w*)+)\s*\(", src):
@@ -110,37 +110,37 @@ def main(argv):
     used = used_paths(folder)
 
     def covered(path):
-        # cubierto si su ruta exacta esta implementada, o si es prefijo de una
-        # implementada (p.ej. "playdate.graphics.sprite" cubre su subarbol)
+        # covered if its exact path is implemented, or if it is a prefix of an
+        # implemented one (e.g. "playdate.graphics.sprite" covers its subtree)
         if path in impl:
             return True
         return any(i.startswith(path + ".") for i in impl)
 
     missing = sorted(p for p in used if not covered(p))
-    # agrupar por modulo de nivel 2
+    # group by level-2 module
     groups = {}
     for p in missing:
         parts = p.split(".")
         key = ".".join(parts[:3]) if len(parts) > 3 else ".".join(parts[:2])
         groups.setdefault(key, []).append(p)
 
-    print(f"Juego: {folder}")
-    print(f"APIs implementadas : {len(impl)}")
-    print(f"Llamadas detectadas: {len(used)}")
-    print(f"FALTAN             : {len(missing)}\n")
+    print(f"Game: {folder}")
+    print(f"Implemented APIs   : {len(impl)}")
+    print(f"Detected calls     : {len(used)}")
+    print(f"MISSING            : {len(missing)}\n")
 
     if not missing:
-        print("  (nada faltante: el emulador cubre todo lo que usa este juego)")
+        print("  (nothing missing: the emulator covers everything this game uses)")
     for key in sorted(groups):
         print(f"  {key}  ({len(groups[key])})")
         for p in groups[key][:12]:
             files = ", ".join(sorted(used[p])[:3])
             print(f"      {p}    <- {files}")
         if len(groups[key]) > 12:
-            print(f"      ... y {len(groups[key]) - 12} mas")
+            print(f"      ... and {len(groups[key]) - 12} more")
 
     if show_all:
-        print("\n--- implementadas ---")
+        print("\n--- implemented ---")
         for p in sorted(impl):
             print("   ", p)
     return 0

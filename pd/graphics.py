@@ -1,11 +1,11 @@
-"""playdate.graphics — implementacion Python del contexto de dibujo.
+"""playdate.graphics — Python implementation of the drawing context.
 
-Estado: color de tinta, draw-offset, clip, pila pushContext/popContext y
-lockFocus (dibujar sobre una imagen). Todo dibujo pasa por `self._canvas`, que
-respeta el lockFocus.
+State: ink color, draw-offset, clip, pushContext/popContext stack and
+lockFocus (drawing onto an image). All drawing goes through `self._canvas`,
+which respects lockFocus.
 
-Las imagenes (.pdi/.pdt) se dibujan aqui; el objeto que guarda la Surface vive
-en pd/image.py y el "handle" Lua lo construye runtime.py (patron `__id`).
+Images (.pdi/.pdt) are drawn here; the object holding the Surface lives in
+pd/image.py and the Lua "handle" is built by runtime.py (`__id` pattern).
 """
 
 import pygame
@@ -13,7 +13,7 @@ import pygame
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
-# Centinela: "este contexto no guarda el lock" (ver pushContext/popContext).
+# Sentinel: "this context does not hold the lock" (see pushContext/popContext).
 _NO_LOCK = object()
 
 
@@ -23,32 +23,32 @@ class Graphics:
         self.width = screen.width
         self.height = screen.height
         self.asset_dir = None
-        self.deref = None                  # lo setea Runtime (handle -> objeto Python)
+        self.deref = None                  # set by Runtime (handle -> Python object)
         self._font_size = 16
         self._fonts = {}
-        # 0 = tinta (negro), 1 = papel (blanco) -- valores REALES de
-        # kColorBlack/kColorWhite del SDK. El default de la consola es tinta.
+        # 0 = ink (black), 1 = paper (white) -- REAL values of
+        # kColorBlack/kColorWhite from the SDK. The console default is ink.
         self._color = 0
         self._ox = 0                       # draw offset
-        self._tx = self._ty = 0                # translate (sprites.lua lo usa para el callback draw)
+        self._tx = self._ty = 0                # translate (sprites.lua uses it for the draw callback)
         self._dox = self._doy = 0               # display offset (playdate.display.setOffset)
         self._oy = 0
-        self._lock = None                  # Surface fijada por lockFocus
+        self._lock = None                  # Surface set by lockFocus
         self._stack = []
         self._line_width = 1
         self._line_cap = 0
         self._stroke = 0
         self._font_handle = None
-        self.font_factory = None           # lo setea Runtime (para getFont por defecto)
+        self.font_factory = None           # set by Runtime (for the default getFont)
 
-    # --- internos -------------------------------------------------------
+    # --- internals -------------------------------------------------------
     @property
     def _canvas(self):
         return self._lock if self._lock is not None else self.screen.canvas
 
     def _ink(self):
-        # `_color`: 0 = tinta (negro), 1 = papel (blanco). Coincide con los
-        # valores reales de kColorBlack/kColorWhite del SDK.
+        # `_color`: 0 = ink (black), 1 = paper (white). Matches the real
+        # kColorBlack/kColorWhite values of the SDK.
         return WHITE if self._color else BLACK
 
     def _xy(self, x, y):
@@ -60,9 +60,9 @@ class Graphics:
             self._fonts[size] = pygame.font.Font(None, size)
         return self._fonts[size]
 
-    # --- limpieza / pixeles --------------------------------------------
+    # --- clearing / pixels --------------------------------------------
     def setBackgroundColor(self, color=None):
-        """Color con el que clear() rellena. API real (usada al arrancar)."""
+        """Color that clear() fills with. Real API (used at startup)."""
         self._bg_color = color
 
     def getBackgroundColor(self):
@@ -84,28 +84,28 @@ class Graphics:
 
     # --- color ----------------------------------------------------------
     def setColor(self, color=None):
-        """setColor(color): 0/kColorBlack -> tinta, 1/kColorWhite -> papel.
+        """setColor(color): 0/kColorBlack -> ink, 1/kColorWhite -> paper.
 
-        Acepta las TRES formas que usan los juegos: la constante
-        (`kColorBlack = 0`, `kColorWhite = 1`, valores REALES del SDK), el
-        literal `0x000000`/`0xffffff` y nil (vuelve a tinta). Antes hacia
-        `1 if color else 0`, que convertia `setColor(0xffffff)` (BLANCO) en
-        NEGRO: cualquier juego que pidiera blanco con el literal salia negro.
+        Accepts the THREE forms games use: the constant
+        (`kColorBlack = 0`, `kColorWhite = 1`, REAL SDK values), the literal
+        `0x000000`/`0xffffff` and nil (back to ink). Before it did
+        `1 if color else 0`, which turned `setColor(0xffffff)` (WHITE) into
+        BLACK: any game asking for white with the literal came out black.
         """
         if color is None:
             color = 0
         c = int(color)
         if c in (0xFFFFFF, 0xFFFFFFFF):
-            self._color = 1          # blanco (papel)
+            self._color = 1          # white (paper)
         elif c == 0x000000:
-            self._color = 0          # negro (tinta)
+            self._color = 0          # black (ink)
         else:
             self._color = 1 if c == 1 else 0
 
     def getColor(self):
         return self._color
 
-    # --- draw offset / clip / contexto ---------------------------------
+    # --- draw offset / clip / context ---------------------------------
     def setDrawOffset(self, x, y):
         self._ox, self._oy = int(x), int(y)
 
@@ -113,10 +113,10 @@ class Graphics:
         return (self._ox, self._oy)
 
     # --- translate ------------------------------------------------------
-    # sprites.lua de verdad llama al callback `draw(s, x, y, w, h)` del sprite
-    # con el TRANSLATE puesto en la esquina del sprite: por eso el juego puede
-    # dibujar en (0,0) y ver su texto en la posicion del sprite. Sin translate,
-    # Score:draw de FlippyFish pintaba el "0" en la esquina del canvas.
+    # sprites.lua really calls the sprite's `draw(s, x, y, w, h)` callback with
+    # the TRANSLATE set to the sprite's corner: that's why the game can draw at
+    # (0,0) and see its text at the sprite's position. Without translate,
+    # FlippyFish's Score:draw painted the "0" in the canvas corner.
     def setTranslate(self, x, y):
         self._tx, self._ty = int(x), int(y)
 
@@ -134,12 +134,12 @@ class Graphics:
         return (self._dox, self._doy)
 
     def setClipRect(self, x=None, y=None, w=None, h=None):
-        """setClipRect([x, y, w, h]) — SIN argumentos, quita el recorte.
+        """setClipRect([x, y, w, h]) — with NO arguments, clears the clip.
 
-        La API permite llamarla sin argumentos para resetear el clip rect, y los
-        juegos lo hacen EN MEDIO de su callback de dibujado. Si aqui revienta,
-        el callback muere a medias: el juego "corre sin errores" pero el menu y
-        el cursor nunca llegan a pintarse. Era exactamente eso.
+        The API allows calling it with no arguments to reset the clip rect, and
+        games do it IN THE MIDDLE of their draw callback. If it crashes here,
+        the callback dies halfway: the game "runs without errors" but the menu
+        and cursor never get drawn. That was exactly it.
         """
         if x is None or y is None or w is None or h is None:
             self.clearClipRect()
@@ -150,11 +150,11 @@ class Graphics:
         self._canvas.set_clip(None)
 
     def copyFrameBufferToImage(self, image=None):
-        """playdate.graphics.copyFrameBufferToImage(image): Copia la pantalla a
-        esa imagen.
+        """playdate.graphics.copyFrameBufferToImage(image): copies the screen to
+        that image.
 
-        Es la API con la que un juego captura el framebuffer (transiciones,
-        caches de pantalla). Faltaba, y el juego la llama.
+        It is the API a game uses to capture the framebuffer (transitions,
+        screen caches). It was missing, and the game calls it.
         """
         if image is None:
             return
@@ -164,16 +164,17 @@ class Graphics:
             surf.blit(self._canvas, (0, 0))
 
     def pushContext(self, *args):
-        """pushContext([image]): guarda el estado y, si recibe una imagen, pasa a
-        dibujar SOBRE ELLA.
+        """pushContext([image]): saves the state and, if given an image, starts
+        drawing ONTO IT.
 
-        CUIDADO con el lock: `pushContext()` SIN destino NO debe guardar/restaurar
-        `_lock`, porque el lock lo controla `lockFocus`/`unlockFocus` por separado.
-        Antes se guardaba siempre y `popContext` lo restauraba: CoreLibs hace
-        decenas de push/pop internos al importarse y uno de ellos PISABA el lock
-        que el juego ya tenia puesto. Sin lock, la escena del juego se dibujaba en
-        el framebuffer, su buffer de pantalla quedaba vacio y su blit lo borraba
-        todo -> intro y menu invisibles, pantalla en blanco.
+        CAREFUL with the lock: `pushContext()` WITHOUT a target must NOT
+        save/restore `_lock`, because the lock is controlled by
+        `lockFocus`/`unlockFocus` separately. Before it always saved and
+        `popContext` restored it: CoreLibs does dozens of internal push/pop on
+        import and one of them OVERWROTE the lock the game had already set.
+        Without the lock, the game scene was drawn to the framebuffer, its
+        screen buffer stayed empty and its blit erased everything -> invisible
+        intro and menu, blank screen.
         """
         target = args[0] if args else None
         self._stack.append((self._color, self._ox, self._oy,
@@ -184,7 +185,7 @@ class Graphics:
             surf = getattr(obj, "surface", None)
             if surf is not None:
                 self._lock = surf
-                self._ox = self._oy = 0     # un contexto nuevo empieza sin offset
+                self._ox = self._oy = 0     # a new context starts with no offset
                 self._canvas.set_clip(None)
 
     def popContext(self):
@@ -194,7 +195,7 @@ class Graphics:
             self._dither = dither
             self._tx, self._ty = tx, ty
             if lock is not _NO_LOCK:
-                self._lock = lock           # solo si el push era CON destino
+                self._lock = lock           # only if the push had a target
             if self._lock is None:
                 self.screen.canvas.set_clip(None)
 
@@ -212,7 +213,7 @@ class Graphics:
         return None
 
     def setDitherPattern(self, pattern=0, x=None, y=None):
-        # no-op: el dither ordenado se probo y se revirtio (documentado en screen.py)
+        # no-op: ordered dithering was tried and reverted (documented in screen.py)
         pass
 
     def setImageDrawMode(self, mode=0):
@@ -251,7 +252,7 @@ class Graphics:
     def getStrokeLocation(self):
         return self._stroke
 
-    # --- primitivas -----------------------------------------------------
+    # --- primitives -----------------------------------------------------
     def fillRect(self, x, y, w, h):
         pygame.draw.rect(self._canvas, self._ink(), (*self._xy(x, y), int(w), int(h)))
 
@@ -288,12 +289,12 @@ class Graphics:
     def drawCircleAtPoint(self, x, y, radius):
         pygame.draw.circle(self._canvas, self._ink(), self._xy(x, y), int(radius), self._line_width)
 
-    # --- texto ----------------------------------------------------------
+    # --- text ----------------------------------------------------------
     def setFont(self, name=None, size=None):
         if isinstance(name, (int, float)) and size is None:
             self._font_size = int(name)
         elif name is not None and size is None:
-            self._font_handle = name       # handle de fuente (de font.new/getSystemFont)
+            self._font_handle = name       # font handle (from font.new/getSystemFont)
         elif size:
             self._font_size = int(size)
 
@@ -306,13 +307,13 @@ class Graphics:
         return self._get_font().size(str(text))[0]
 
     def getTextSize(self, text, *a):
-        """Ancho/alto del texto con la fuente ACTUAL.
+        """Width/height of the text with the CURRENT font.
 
-        OJO: si el juego hizo setFont(font.new(".pft")), hay que medir con ESA
-        fuente. Medir con la fuente de pygame devolvia anchos a la mitad (48 en
-        vez de 95 para "Klondike"), y CoreLibs usa esta funcion para dimensionar
-        los rects de texto: los items del menu de Smolitaire salian truncados a
-        la mitad y las cajas del UI, mal medidas.
+        NOTE: if the game did setFont(font.new(".pft")), you must measure with
+        THAT font. Measuring with the pygame font returned half widths (48
+        instead of 95 for "Klondike"), and CoreLibs uses this function to size
+        text rects: Smolitaire's menu items came out truncated in half and the
+        UI boxes were mis-measured.
         """
         t = str(text)
         pft = self._pft_font()
@@ -325,7 +326,7 @@ class Graphics:
         return (self._get_font().size(t)[0], self._font_size)
 
     def _pft_font(self):
-        """La fuente .pft actual, si el juego hizo setFont(font.new(...))."""
+        """The current .pft font, if the game did setFont(font.new(...))."""
         h = self._font_handle
         if h is None or self.deref is None:
             return None
@@ -336,13 +337,13 @@ class Graphics:
         return obj if obj is not None and hasattr(obj, "getGlyph") else None
 
     def _draw_pft(self, text, x, y):
-        """Dibuja con la fuente .pft (la real del juego).
+        """Draws with the .pft font (the game's real one).
 
-        Los glifos se TINEN con el color actual usando su mascara: el bitmap del
-        .pft trae la tinta de un color fijo, asi que blitearlo tal cual dibujaria
-        siempre del mismo color -- y sobre un fondo negro las letras blancas no
-        se verian. Antes se usaba la fuente por defecto de pygame y el texto
-        salia con otra tipografia (solapado/ilegible).
+        The glyphs are TINTED with the current color using their mask: the .pft
+        bitmap carries the ink in a fixed color, so blitting it as-is would
+        always draw the same color -- and on a black background white letters
+        would not show. Before, the default pygame font was used and the text
+        came out in another typeface (overlapping/illegible).
         """
         font = self._pft_font()
         if font is None:
@@ -378,23 +379,23 @@ class Graphics:
         self._canvas.blit(surf, self._xy(x, y))
 
     def drawTextAligned(self, text, x, y, align=0, *a):
-        """drawTextAligned(text, x, y, alignment): el texto se alinea SOBRE x.
+        """drawTextAligned(text, x, y, alignment): the text is aligned ON x.
 
-        Con kTextAlignment.center, x es el CENTRO (y con right, el borde derecho).
-        Antes se ignoraba `alignment` y se dibujaba siempre desde x, lo que dejaba
-        el texto desplazado media anchura a la derecha: por eso el titulo del
-        juego salia cortado y descentrado respecto al emulador oficial.
+        With kTextAlignment.center, x is the CENTER (and with right, the right
+        edge). Before, `alignment` was ignored and it always drew from x, which
+        left the text shifted half a width to the right: that's why the game
+        title came out cut and off-center vs the official emulator.
 
-        Valores segun CoreLibs: left=0, right=1, center=2.
+        Values per CoreLibs: left=0, right=1, center=2.
         """
         try:
             al = int(align or 0)
         except (TypeError, ValueError):
             al = 0
         w = self.getTextWidth(str(text))
-        if al == 1:              # right: x es el borde derecho
+        if al == 1:              # right: x is the right edge
             x = x - w
-        elif al == 2:            # center: x es el centro
+        elif al == 2:            # center: x is the center
             x = x - w // 2
         self.drawText(text, x, y)
 
@@ -402,7 +403,7 @@ class Graphics:
         w = self.getTextWidth(text)
         self.drawText(text, (self.width - w) // 2, y)
 
-    # --- imagenes -------------------------------------------------------
+    # --- images -------------------------------------------------------
     def _image_surface(self, handle):
         if self.deref is None:
             return None
@@ -410,16 +411,16 @@ class Graphics:
         return obj.surface if obj is not None else None
 
     def _poly_pts(self, *args):
-        """Normaliza los argumentos de drawPolygon/fillPolygon a [(x,y), ...].
+        """Normalizes drawPolygon/fillPolygon arguments to [(x,y), ...].
 
-        La API admite las DOS formas:
-          fillPolygon(x1, y1, x2, y2, ...)        -> coordenadas planas
-          drawPolygon(polygon)                    -> objeto polygon / lista de puntos
-        Un juego real (Kickflip Coast) usa las dos, y sin esto revienta con
+        The API accepts BOTH forms:
+          fillPolygon(x1, y1, x2, y2, ...)        -> flat coordinates
+          drawPolygon(polygon)                    -> polygon object / point list
+        A real game (Kickflip Coast) uses both, and without this it crashes with
         "field 'fillPolygon' is not callable".
         """
         pts = []
-        # forma 1: un unico objeto/lista de puntos
+        # form 1: a single object/point list
         if len(args) == 1:
             first = args[0]
             try:
@@ -439,7 +440,7 @@ class Graphics:
                         return pts
             except Exception:
                 pass
-        # forma 2: coordenadas planas
+        # form 2: flat coordinates
         vals = []
         for a in args:
             try:
@@ -451,7 +452,7 @@ class Graphics:
         return pts
 
     def fillTriangle(self, x1=None, y1=None, x2=None, y2=None, x3=None, y3=None, *a):
-        """fillTriangle(x1,y1,x2,y2,x3,y3): triangulo relleno (particulas)."""
+        """fillTriangle(x1,y1,x2,y2,x3,y3): filled triangle (particles)."""
         try:
             pts = [self._xy(x1, y1), self._xy(x2, y2), self._xy(x3, y3)]
             pygame.draw.polygon(self._canvas, self._ink(), pts, 0)
@@ -492,17 +493,17 @@ class Graphics:
         self._canvas.blit(surf, self._xy(x, y))
 
     def image_draw_inkfill(self, handle, x, y, *a):
-        """Dibuja TODOS los pixeles opacos de la imagen en TINTA (oscuro).
+        """Draws ALL the image's opaque pixels in INK (dark).
 
-        Para imagenes "relleno claro" (cursor de mano casi todo blanco) que sobre
-        un fondo claro serian invisibles. Genera un rectangulo usando la mascara
-        de opacidad de la imagen.
+        For "light-filled" images (a hand cursor that is almost all white) that
+        would be invisible on a light background. Builds a shape using the
+        image's opacity mask.
         """
         surf = self._image_surface(handle)
         if surf is None:
             return
         w, h = surf.get_size()
-        # superficie solida del color de tinta, recortada con el shape
+        # solid surface of the ink color, clipped with the shape
         import pygame as _pg
         shape = _pg.Surface((w, h), _pg.SRCALPHA)
         shape.fill((0, 0, 0, 0))
@@ -523,10 +524,10 @@ class Graphics:
                         int(y) - surf.get_height() // 2, flip)
 
     def image_draw_anchored(self, handle, x, y, ax=0.0, ay=0.0):
-        """Dibuja la imagen anclada: el punto (ax*ancho, ay*alto) cae en (x, y).
+        """Draws the image anchored: the point (ax*width, ay*height) lands at (x, y).
 
-        CoreLibs lo expone como `img:drawAnchored(x, y, ax, ay)`; un juego lo usa
-        para centrar (ax=0.5) o alinear arriba (ay=0) sin calcular el tamano.
+        CoreLibs exposes it as `img:drawAnchored(x, y, ax, ay)`; a game uses it
+        to center (ax=0.5) or align to the top (ay=0) without computing the size.
         """
         surf = self._image_surface(handle)
         if surf is None:
@@ -536,11 +537,11 @@ class Graphics:
                         int(y) - int(surf.get_height() * (ay or 0)))
 
     def image_draw_faded(self, handle, x, y, alpha=1.0, flip=None):
-        """drawFaded: en una pantalla de 1 bit no hay translucidez, hay TRAMA.
+        """drawFaded: on a 1-bit screen there is no translucency, there is DITHER.
 
-        Aproximacion por tramos (sin motor de dithering): >=0.66 solido,
-        0.33-0.66 damero al 50%, <0.33 damero al 25%. Es lo que hace el hardware
-        conceptualmente; con dithering real daria tonos intermedios mas finos.
+        Piecewise approximation (no dithering engine): >=0.66 solid,
+        0.33-0.66 checkerboard at 50%, <0.33 checkerboard at 25%. That is what
+        the hardware does conceptually; real dithering would give finer mid-tones.
         """
         surf = self._image_surface(handle)
         if surf is None:

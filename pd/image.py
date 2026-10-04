@@ -1,9 +1,9 @@
-"""image.py — objetos `playdate.graphics.image` / `imagetable` (lado Python).
+"""image.py — `playdate.graphics.image` / `imagetable` objects (Python side).
 
-Un juego compilado referencia imagenes por NOMBRE sin extension
-(p.ej. `image.new("images/title")`), y el asset real es `images/title.pdi`.
-Aqui esta el objeto que guarda la Surface ya decodificada; los "handles" Lua
-(los que ve el juego) se construyen en runtime.py con el patron `__id`.
+A compiled game references images by NAME without an extension
+(e.g. `image.new("images/title")`), and the real asset is `images/title.pdi`.
+This is the object that holds the already-decoded Surface; the Lua "handles"
+(the ones the game sees) are built in runtime.py with the `__id` pattern.
 """
 
 import os
@@ -14,12 +14,12 @@ ASSET_EXTS = (".pdi", ".pdt", ".png", ".gif", "")
 
 
 def resolve_asset(asset_dir, name):
-    """Encuentra el archivo real de un asset por nombre, con o sin extension.
+    """Finds the real file of an asset by name, with or without an extension.
 
-    La API IGNORA la extension: un juego real pide `image.new("images/background.png")`
-    y el asset es `images/background.pdi`. Si solo se prueba `nombre+ext` la
-    busqueda falla, `image.new` devuelve nil y el juego muere indexandolo. Se
-    quita primero cualquier extension conocida y luego se prueba cada formato.
+    The API IGNORES the extension: a real game asks `image.new("images/background.png")`
+    and the asset is `images/background.pdi`. If you only try `name+ext` the
+    lookup fails, `image.new` returns nil and the game dies indexing it. Any
+    known extension is stripped first, then each format is tried.
     """
     name = str(name).lstrip("/")
     if not asset_dir:
@@ -27,13 +27,13 @@ def resolve_asset(asset_dir, name):
     candidatos = [name]
     base, ext = os.path.splitext(name)
     if ext.lower() in (".png", ".pdi", ".pdt", ".psd", ".gif", ".jpg", ".jpeg", ".lua", ".pft", ".fnt"):
-        candidatos.insert(0, base)          # el nombre sin extension, primero
+        candidatos.insert(0, base)          # the name without extension, first
     for cand in candidatos:
         for e in ASSET_EXTS:
             p = os.path.join(asset_dir, cand + e)
             if os.path.isfile(p):
                 return p
-        # tambien el nombre tal cual (assets sin extension)
+        # also the name as-is (assets without an extension)
         p = os.path.join(asset_dir, cand)
         if os.path.isfile(p):
             return p
@@ -41,7 +41,7 @@ def resolve_asset(asset_dir, name):
 
 
 class PDImage:
-    """Envuelve una pygame.Surface. `surface` es el bitmap decodificado."""
+    """Wraps a pygame.Surface. `surface` is the decoded bitmap."""
 
     def __init__(self, surface):
         self.surface = surface
@@ -59,7 +59,7 @@ class PDImage:
 
 
 class PDImageTable:
-    """spritesheet: lista de PDImage + celdas por fila (para getImage(x,y))."""
+    """spritesheet: list of PDImage + cells per row (for getImage(x,y))."""
 
     def __init__(self, images, cells_per_row):
         self.images = images
@@ -70,18 +70,18 @@ class PDImageTable:
 
     def getImage(self, a, b=None):
         if b is None:
-            i = int(a) - 1                     # secuencial, 1-based
+            i = int(a) - 1                     # sequential, 1-based
             return self.images[i] if 0 <= i < len(self.images) else None
-        x, y = int(a), int(b)                  # matriz, 0-based
+        x, y = int(a), int(b)                  # matrix, 0-based
         i = y * self.per_row + x
         return self.images[i] if 0 <= i < len(self.images) else None
 
 
 def load_image(asset_dir, path):
-    """image.new(path) -> PDImage (decodifica .pdi/.pdt; soporta .png de fallback)."""
+    """image.new(path) -> PDImage (decodes .pdi/.pdt; supports .png fallback)."""
     real = resolve_asset(asset_dir, path)
     if real is None:
-        raise FileNotFoundError(f"asset no encontrado: {path!r} en {asset_dir!r}")
+        raise FileNotFoundError(f"asset not found: {path!r} in {asset_dir!r}")
     with open(real, "rb") as f:
         data = f.read()
     return PDImage(decode_pdi(data))
@@ -91,7 +91,7 @@ def load_imagetable(asset_dir, path):
     """imagetable.new(path) -> PDImageTable."""
     real = resolve_asset(asset_dir, path)
     if real is None:
-        raise FileNotFoundError(f"imagetable no encontrada: {path!r} en {asset_dir!r}")
+        raise FileNotFoundError(f"imagetable not found: {path!r} in {asset_dir!r}")
     with open(real, "rb") as f:
         data = f.read()
     cells, per_row = decode_pdt(data)

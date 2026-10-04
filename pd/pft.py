@@ -1,38 +1,37 @@
-"""pd/pft.py — decodificador de fuentes .pft (bitmap 1-bit de Playdate).
+"""pd/pft.py — .pft font decoder (Playdate 1-bit bitmap).
 
-FORMATO — crackeado contra .pft reales compilados con `pdc`, cruzando con el
-`.fnt` de origen como oraculo (16/16 avances correctos). La spec publica
-(cranksters/playdate-reverse-engineering/formats/pft.md) esta INCOMPLETA; las
-correcciones verificadas van marcadas con «OJO».
+FORMAT — cracked against real .pft files compiled with `pdc`, cross-checked
+with the source `.fnt` as an oracle (16/16 correct advances). The public spec
+(cranksters/playdate-reverse-engineering/formats/pft.md) is INCOMPLETE; the
+verified corrections are marked with «NOTE».
 
-  cabecera:  char[12] "Playdate FNT" + uint32 flags
-             flags & 0x80000000 -> comprimido con zlib
-             flags & 0x00000001 -> tiene caracteres por encima de U+1FFFF
-  si comprimido, cabecera de fuente (OJO: 16 bytes, la spec dice 12):
-             uint32 tamano_descomprimido, uint32 max_glyph_w, uint32 max_glyph_h,
-             uint32 reservado (visto 0)
+  header:    char[12] "Playdate FNT" + uint32 flags
+             flags & 0x80000000 -> compressed with zlib
+             flags & 0x00000001 -> has characters above U+1FFFF
+  if compressed, font header (NOTE: 16 bytes, the spec says 12):
+             uint32 decompressed_size, uint32 max_glyph_w, uint32 max_glyph_h,
+             uint32 reserved (seen 0)
   page list: uint8 glyph_w, uint8 glyph_h, uint16 tracking, 64 bytes page_usage,
-             uint32 offset por cada pagina presente
-             (OJO: las paginas van SEGUIDAS tras esta lista; esos offsets no son
-              el inicio de cada pagina)
-  pagina:    uint24 reservado, uint8 num_glyphs, 32 bytes glyph_usage,
-             uint16[num_glyphs] tabla de offsets de glyph
-             (OJO: la spec NO menciona esta tabla; los offsets son relativos a
-              page_start+32)
-             registros de glyph, consecutivos
+             uint32 offset per present page
+             (NOTE: the pages come CONSECUTIVELY after this list; those offsets
+              are not each page's start)
+  page:      uint24 reserved, uint8 num_glyphs, 32 bytes glyph_usage,
+             uint16[num_glyphs] glyph-offset table
+             (NOTE: the spec does not mention this table; the offsets are
+              relative to page_start+32)
+             glyph records, consecutive
   glyph:     uint8 advance, uint8 n_short, uint16 n_long,
-             n_short x (uint8 codepoint_en_pagina, int8 kerning),
-             padding a multiplo de 4 (medido desde el inicio del registro),
+             n_short x (uint8 codepoint_in_page, int8 kerning),
+             padding to a multiple of 4 (measured from the record start),
              n_long x (uint24 codepoint, int8 kerning),
-             y los pixeles como "Image Cell" (el MISMO formato que .pdi)
+             and the pixels as an "Image Cell" (the SAME format as .pdi)
 
-El indice de pagina de un codepoint es `cp >> 8`; el glyph dentro de la pagina
-es `cp & 0xFF`.
+A codepoint's page index is `cp >> 8`; the glyph within the page is `cp & 0xFF`.
 
-La posicion de cada glyph se localiza buscando hacia adelante un registro valido
-(el padding variable entre registros impide encadenarlos a ciegas). El validador
-exige que el box de la Cell sea exactamente glyph_w x glyph_h, que es lo que hace
-que no haya falsos positivos.
+Each glyph's position is found by scanning forward for a valid record (the
+variable padding between records prevents chaining them blindly). The validator
+requires the Cell box to be exactly glyph_w x glyph_h, which is what avoids
+false positives.
 """
 
 from __future__ import annotations
@@ -52,7 +51,7 @@ class PGlyph:
     def __init__(self, codepoint, advance, surface, kerning):
         self.codepoint = codepoint
         self.advance = advance
-        self.surface = surface            # pygame.Surface SRCALPHA (tinta opaca)
+        self.surface = surface            # pygame.Surface SRCALPHA (opaque ink)
         self.kerning = kerning            # {codepoint: px}
 
     def __repr__(self):
@@ -60,7 +59,7 @@ class PGlyph:
 
 
 class PDFont:
-    """Fuente .pft cargada: metricas + glyphs por pagina."""
+    """Loaded .pft font: metrics + glyphs per page."""
 
     def __init__(self, glyph_w, glyph_h, tracking, pages, max_w=None, max_h=None):
         self.glyph_w = glyph_w
@@ -70,7 +69,7 @@ class PDFont:
         self.max_w = max_w or glyph_w
         self.max_h = max_h or glyph_h
 
-    # --- consultas que usa el juego / CoreLibs -------------------------
+    # --- queries used by the game / CoreLibs -------------------------
     def getGlyph(self, codepoint):
         return self.pages.get(int(codepoint) >> 8, {}).get(int(codepoint))
 
@@ -83,23 +82,23 @@ class PDFont:
         return sum(len(p) for p in self.pages.values())
 
     def getHeight(self, *a):
-        """Altura REAL de la fuente: la tinta mas alta de sus glifos.
+        """REAL font height: the tallest ink of its glyphs.
 
-        NO es el alto de la Cell del .pft (glyph_h), que es la CAJA del bitmap y
-        resulta mucho mayor que la tinta (medido en Smolitaire: Cell=21, tinta de
-        'A'=8). CoreLibs decide si dibujar con
+        It is NOT the .pft Cell height (glyph_h), which is the bitmap BOX and
+        turns out much taller than the ink (measured in Smolitaire: Cell=21,
+        'A' ink=8). CoreLibs decides whether to draw with
 
-            if y + lineHeight + fontHeight <= bottom then <dibuja>
+            if y + lineHeight + fontHeight <= bottom then <draw>
 
-        asi que devolver el alto de la Cell hace que NO dibuje texto en un rect
-        de la altura "natural" del texto -> los items del menu salian vacios.
+        so returning the Cell height makes it NOT draw text in a rect of the
+        text's "natural" height -> the menu items came out empty.
         """
         if getattr(self, "_real_h", None) is None:
-            # MODA de las alturas de tinta, no el maximo: unos pocos glifos
-            # especiales (Ⓐ, U+FFFD) llenan la Cell entera y arrastrarian el
-            # valor al alto de la Cell. La altura que representa a la fuente es
-            # la de los glifos comunes (medido en twenty-minute-roman-17:
-            # 53 glifos a 17 px, y solo 3 a 21 px).
+            # MODE of the ink heights, not the max: a few special glyphs
+            # (Ⓐ, U+FFFD) fill the whole Cell and would drag the value up to
+            # the Cell height. The height that represents the font is that of
+            # the common glyphs (measured in twenty-minute-roman-17:
+            # 53 glyphs at 17 px, and only 3 at 21 px).
             hist = {}
             for g in self.allGlyphs():
                 sf = getattr(g, "surface", None)
@@ -114,25 +113,25 @@ class PDFont:
                 if r.height > 0:
                     hist[r.height] = hist.get(r.height, 0) + 1
             if hist:
-                # empate -> la mayor (queremos cubrir el glifo mas alto comun)
+                # tie -> the largest (we want to cover the tallest common glyph)
                 self._real_h = max(hist.items(), key=lambda kv: (kv[1], kv[0]))[0]
             else:
                 self._real_h = self.glyph_h
         return self._real_h
 
     def getLeading(self, *a):
-        """Leading de la fuente: 0 por defecto.
+        """Font leading: 0 by default.
 
-        OJO: NO es el `tracking`. Devolverlo hacia que CoreLibs NO dibujara
-        texto en rects ajustados: su condicion es
+        NOTE: it is NOT the `tracking`. Returning it made CoreLibs NOT draw
+        text in tight rects: its condition is
 
-            if y + lineHeight + fontHeight <= bottom then <dibuja>
+            if y + lineHeight + fontHeight <= bottom then <draw>
 
-        con lineHeight = fontHeight + leading, o sea exige
-        `2*fontHeight + leading <= altoDelRect`. Como el juego dimensiona el
-        rect justo a la altura del texto, cualquier leading positivo lo saca de
-        rango y la linea no se pinta (los dialogos con fondo negro salian sin
-        letras). El tracking se consulta con getTracking().
+        with lineHeight = fontHeight + leading, i.e. it requires
+        `2*fontHeight + leading <= rectHeight`. Since the game sizes the rect
+        exactly to the text height, any positive leading takes it out of range
+        and the line is not drawn (the black-background dialogs came out
+        without letters). Tracking is queried with getTracking().
         """
         return 0
 
@@ -140,7 +139,7 @@ class PDFont:
         return self.tracking
 
     def getTextWidth(self, text):
-        """Ancho con kerning (usa el par anterior->actual)."""
+        """Width with kerning (uses the previous->current pair)."""
         t = str(text)
         if not t:
             return 0
@@ -188,11 +187,11 @@ def _page_usage(data, off):
 
 
 def _glyph_surface(buf, off):
-    """Pixeles del glyph (Image Cell) -> (Surface con la tinta opaca, offset).
+    """Glyph pixels (Image Cell) -> (Surface with opaque ink, offset).
 
-    Convencion de tinta, verificada contra el glyph `/` del .pft minimo (color
-    todo 0x00 + alpha en diagonal): **bit 0 = tinta**, igual que en .pdi (donde
-    bit 1 = fondo). El plano de alpha, si existe, da la opacidad.
+    Ink convention, verified against the `/` glyph of the minimal .pft (all
+    0x00 color + alpha on the diagonal): **bit 0 = ink**, same as in .pdi
+    (where bit 1 = background). The alpha plane, if present, gives opacity.
     """
     clip_w, clip_h, stride, clip_l, clip_r, clip_t, clip_b, flags = struct.unpack_from(
         "<8H", buf, off)
@@ -201,7 +200,7 @@ def _glyph_surface(buf, off):
     color_bm = buf[p:p + n]
     p += n
     alpha_bm = None
-    if flags % 4 in (1, 3):               # bitmap de alpha presente
+    if flags % 4 in (1, 3):               # alpha bitmap present
         alpha_bm = buf[p:p + n]
         p += n
 
@@ -213,7 +212,7 @@ def _glyph_surface(buf, off):
         for x in range(clip_w):
             bit = (x & 7)
             cbit = (color_bm[row + (x >> 3)] >> (7 - bit)) & 1
-            if cbit:                      # bit 1 = fondo, no es tinta
+            if cbit:                      # bit 1 = background, not ink
                 continue
             if alpha_bm is not None:
                 abit = (alpha_bm[row + (x >> 3)] >> (7 - bit)) & 1
@@ -224,7 +223,7 @@ def _glyph_surface(buf, off):
 
 
 def _try_record(buf, p, gw, gh, page_index):
-    """Intenta leer un registro de glyph en p. Devuelve dict o None."""
+    """Tries to read a glyph record at p. Returns dict or None."""
     n = len(buf)
     if p + 20 > n:
         return None
@@ -234,14 +233,14 @@ def _try_record(buf, p, gw, gh, page_index):
     if advance > gw + 8 or n_short > 64 or n_long > 64:
         return None
     q = p + 4 + 2 * n_short
-    q += (-(q - p)) % 4                    # padding desde el inicio del registro
+    q += (-(q - p)) % 4                    # padding from the record start
     q += 4 * n_long
     if q + CELL_HEADER > n:
         return None
     cw, ch, stride, cl, cr, ct, cb, flags = struct.unpack_from("<8H", buf, q)
     if cw > gw or ch > gh:
         return None
-    if cl + cw + cr != gw or ct + ch + cb != gh:      # el box siempre es completo
+    if cl + cw + cr != gw or ct + ch + cb != gh:      # the box is always complete
         return None
     if not (cw == 0 and ch == 0) and stride != max(1, (cw + 7) // 8):
         return None
@@ -264,22 +263,22 @@ def _try_record(buf, p, gw, gh, page_index):
         "surface": surf,
         "kerning": kerning,
         "cell": (cw, ch, stride, cl, cr, ct, cb, flags),
-        # OJO: el fin se calcula AQUI, no con el offset que devuelve
-        # _glyph_surface: esa funcion ya consume los dos bitmaps (color y alpha),
-        # asi que sumarle `size` otra vez doblaba el tamaño del ultimo bitmap y
-        # desincronizaba el recorrido (96 glyphs -> 12).
+        # NOTE: the end is computed HERE, not with the offset returned by
+        # _glyph_surface: that function already consumes both bitmaps (color
+        # and alpha), so adding `size` again doubled the last bitmap's size and
+        # desynced the walk (96 glyphs -> 12).
         "end": q + CELL_HEADER + size,
     }
 
 
 def _walk_page(buf, pstart, page_index, gw, gh, trust_table):
-    """Recorre los glyphs de una pagina. Devuelve (glyphs, ultimo_fin)."""
+    """Walks the glyphs of a page. Returns (glyphs, last_end)."""
     num_glyphs = buf[pstart + 3]
     usage = buf[pstart + 4:pstart + 36]
     slots = [i for i in range(256) if (usage[i >> 3] >> (i & 7)) & 1]
     table_off = pstart + 36
     offsets = [_u16(buf, table_off + 2 * i) for i in range(num_glyphs)]
-    base = pstart + 32                    # los offsets son relativos a aqui
+    base = pstart + 32                    # the offsets are relative to here
 
     p = table_off + 2 * num_glyphs
     glyphs = {}
@@ -305,14 +304,14 @@ def _walk_page(buf, pstart, page_index, gw, gh, trust_table):
 
 
 def _parse_page(buf, pstart, page_index, gw, gh):
-    """Parsea una pagina eligiendo la estrategia que recupere TODOS los glyphs.
+    """Parses a page choosing the strategy that recovers ALL the glyphs.
 
-    - `trust_table`: usar la tabla uint16 de offsets. Valida cuando su primer
-      offset apunta exactamente al inicio de los datos de glyph (fuentes
-      recientes, p.ej. las del SDK actual).
-    - solo avance: obligatorio en fuentes antiguas (pdc 2022, p.ej. Smolitaire),
-      donde la base de esa tabla NO coincide y un acierto espurio desincroniza
-      el recorrido (96 glyphs -> 10).
+    - `trust_table`: use the uint16 offset table. Valid when its first offset
+      points exactly at the start of the glyph data (recent fonts, e.g. the
+      current SDK ones).
+    - advance-only: required in old fonts (pdc 2022, e.g. Smolitaire), where
+      that table's base does NOT match and a spurious hit desyncs the walk
+      (96 glyphs -> 10).
     """
     num_glyphs = buf[pstart + 3]
     table_off = pstart + 36
@@ -331,11 +330,11 @@ def _parse_page(buf, pstart, page_index, gw, gh):
 
 
 def _find_page(buf, from_off, page_index, gw, gh):
-    """Localiza una cabecera de pagina valida desde from_off.
+    """Finds a valid page header from from_off.
 
-    Invariante fuerte: popcount(usage de 32 B) == num_glyphs. No siempre esta en
-    `68 + 4*npaginas` (en fuentes antiguas la tabla de offsets trae mas entradas
-    que paginas), asi que se busca una ventana corta y se valida recorriendo.
+    Strong invariant: popcount(32 B usage) == num_glyphs. It is not always at
+    `68 + 4*npages` (in old fonts the offset table carries more entries than
+    pages), so a short window is scanned and validated by walking.
     """
     for q in range(from_off, min(from_off + 48, len(buf) - 36)):
         num = buf[q + 3]
@@ -351,16 +350,16 @@ def _find_page(buf, from_off, page_index, gw, gh):
 
 
 def parse_font(data) -> PDFont:
-    """Parsea bytes de un .pft -> PDFont."""
+    """Parses .pft bytes -> PDFont."""
     if data[:12] != MAGIC:
-        raise ValueError(f"no es un .pft (magic={data[:12]!r})")
+        raise ValueError(f"not a .pft (magic={data[:12]!r})")
     flags = _u32(data, 12)
     off = 16
     max_w = max_h = None
     if flags & 0x80000000:
         max_w = _u32(data, off + 4)
         max_h = _u32(data, off + 8)
-        off += 16                          # cabecera de fuente: 16 B, no 12
+        off += 16                          # font header: 16 B, not 12
         buf = zlib.decompress(data[off:])
     else:
         buf = data[off:]
@@ -369,7 +368,7 @@ def parse_font(data) -> PDFont:
     glyph_h = buf[1]
     tracking = _u16(buf, 2)
     present = _page_usage(buf, 4)
-    pstart = 68 + 4 * len(present)         # las paginas van seguidas
+    pstart = 68 + 4 * len(present)         # the pages come consecutively
 
     pages = {}
     for pi in present:
@@ -386,10 +385,10 @@ def load_font(path) -> PDFont:
 
 
 # ----------------------------------------------------------------------
-# helpers de depuracion
+# debug helpers
 
 def render_text(font: PDFont, text, color=(0, 0, 0), background=(255, 255, 255)):
-    """Composicion simple para VERIFICAR la fuente (no es el layout real)."""
+    """Simple composition to VERIFY the font (not the real layout)."""
     text = str(text)
     w = font.getTextWidth(text) + 4
     h = font.glyph_h + 4

@@ -58,9 +58,9 @@ def main():
     paths = stub_paths()
     print(f"API declarada en __stub.lua: {len(paths)} funciones")
 
-    # Comprobacion en Lua, en un solo viaje. Cada ruta va en un pcall: si un
-    # modulo intermedio no existe (p.ej. playdate.geometry.affineTransform),
-    # indexarlo directamente seria "attempt to index a nil value".
+    # Check in Lua, in a single pass. Each path goes in a pcall: if an
+    # intermediate module does not exist (e.g. playdate.geometry.affineTransform),
+    # indexing it directly would be "attempt to index a nil value".
     #
     # OJO: las funciones de API implementadas en PYTHON las ve Lua como
     # `userdata` (lupa las envuelve asi), no como `function` -- pero SI son

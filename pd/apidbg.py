@@ -1,19 +1,19 @@
-"""apidbg.py — depurador de APIs faltantes.
+"""apidbg.py — debugger for missing APIs.
 
-Problema: cuando al juego le falta una API, Lua muere con un mensaje opaco
-("attempt to index a nil value") y no sabes QUE funcion implementar.
+Problem: when the game is missing an API, Lua dies with an opaque message
+("attempt to index a nil value") and you don't know WHICH function to implement.
 
-Solucion: instalar un PROXY sobre el arbol `playdate` que
-  * registra cada acceso a un campo/metodo INEXISTENTE (con su ruta completa),
-  * devuelve un stub encadenable para que el juego SIGA corriendo,
-  * aisla los errores con pcall para descubrir MUCHAS APIs faltantes en una sola
-    corrida en vez de una por vez.
+Solution: install a PROXY over the `playdate` tree that
+  * records every access to a MISSING field/method (with its full path),
+  * returns a chainable stub so the game KEEPS running,
+  * isolates errors with pcall to discover MANY missing APIs in a single
+    run instead of one at a time.
 
-Uso desde Python:
+Usage from Python:
     from pd.apidbg import install, report, safe_caller
-    install(rt)                       # tras rt.load(...)  (o antes de los frames)
-    ...  # correr frames
-    missing, errors = report(rt)      # dicts {ruta: conteo}
+    install(rt)                       # after rt.load(...)  (or before the frames)
+    ...  # run frames
+    missing, errors = report(rt)      # dicts {path: count}
 """
 
 TRACKER_LUA = r"""
@@ -52,10 +52,10 @@ local function guard(t, name, depth)
   end
 end
 
--- playdate y sus sub-tablas (2 niveles)
+-- playdate and its sub-tables (2 levels)
 guard(playdate, "playdate", 2)
 
--- ejecuta un callback aislando errores (para no morir en el primero)
+-- runs a callback isolating errors (so we don't die on the first one)
 function __pd_safe(f)
   if not f then return end
   local ok, err = pcall(f)
@@ -65,7 +65,7 @@ function __pd_safe(f)
   end
 end
 
--- igual para import()
+-- same for import()
 if import then
   local real_import = import
   import = function(n, ...)
@@ -80,21 +80,21 @@ end
 
 
 def install(rt):
-    """Activa el rastreo de APIs faltantes sobre el runtime ya cargado."""
+    """Enables missing-API tracking on the already-loaded runtime."""
     rt.lua.execute(TRACKER_LUA)
     rt.tracked = True
-    # si el juego registro setUpdateCallback/setDrawCallback, envolverlos tambien
+    # if the game registered setUpdateCallback/setDrawCallback, wrap them too
     pd = rt.playdate
     if pd._update_cb is not None and _needs_wrap(pd._update_cb):
-        pass  # se envuelven via __pd_safe al invocar (ver safe_caller)
+        pass  # they are wrapped via __pd_safe when invoked (see safe_caller)
 
 
 def _needs_wrap(_fn):
-    return False  # los callbacks se aislaron ya con safe_caller()
+    return False  # the callbacks are already isolated with safe_caller()
 
 
 def safe_caller(rt):
-    """Devuelve una funcion Python que invoca un callback Lua aislando errores."""
+    """Returns a Python function that invokes a Lua callback isolating errors."""
     return rt.lua.eval("__pd_safe")
 
 
@@ -108,18 +108,18 @@ def _to_pydict(tbl):
 
 
 def report(rt):
-    """Devuelve (missing: {ruta: conteo}, errors: {mensaje: conteo})."""
+    """Returns (missing: {path: count}, errors: {message: count})."""
     g = rt.lua.globals()
     return _to_pydict(g["__pd_missing"]), _to_pydict(g["__pd_errors"])
 
 
 def rawget(rt, tbl, key):
-    """Lee una clave de una tabla Lua SIN disparar el proxy (evita falsos positivos)."""
+    """Reads a key from a Lua table WITHOUT triggering the proxy (avoids false positives)."""
     return rt.lua.eval("rawget")(tbl, key)
 
 
 def api_suggestions(missing):
-    """Convierte rutas faltantes en sugerencias accionables agrupadas por modulo."""
+    """Turns missing paths into actionable suggestions grouped by module."""
     groups = {}
     for path, count in missing.items():
         parts = path.split(".")

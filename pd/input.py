@@ -1,20 +1,20 @@
-"""playdate.button — estado de botones con detección de borde.
+"""playdate.button — button state with edge detection.
 
-Mapeo de teclado (para dev en Mac / Pi con teclado):
-  flechas o WASD  -> D-pad
-  X o Espacio     -> A
+Keyboard mapping (for dev on Mac / Pi with a keyboard):
+  arrows or WASD  -> D-pad
+  X or Space      -> A
   Z               -> B
-Un gamepad se agrega luego en emulator._poll_gamepad().
+A gamepad is added later in emulator._poll_gamepad().
 """
 
-# Nombres válidos de botón en Playdate.
+# Valid Playdate button names.
 BUTTONS = ("A", "B", "Up", "Down", "Left", "Right")
 
 
 class Button:
     def __init__(self):
-        self._down = set()   # presionados este frame (held)
-        self._prev = set()   # presionados el frame anterior
+        self._down = set()   # pressed this frame (held)
+        self._prev = set()   # pressed the previous frame
 
     def _press(self, name):
         self._down.add(name)
@@ -25,16 +25,16 @@ class Button:
     def end_frame(self):
         self._prev = set(self._down)
 
-    # --- API Playdate ---------------------------------------------------
+    # --- Playdate API ---------------------------------------------------
     def isPressed(self, name):
         return name in self._down
 
     def wasPressed(self, name):
-        # borde: presionado ahora y no en el frame anterior
+        # edge: pressed now and not in the previous frame
         return name in self._down and name not in self._prev
 
     def up(self, name):
-        # se soltó este frame
+        # released this frame
         return name in self._prev and name not in self._down
 
     def isPressedAny(self):

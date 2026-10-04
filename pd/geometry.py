@@ -1,17 +1,17 @@
-"""pd/geometry.py — `playdate.geometry` como objetos PYTHON (userdata en Lua).
+"""pd/geometry.py — `playdate.geometry` as PYTHON objects (userdata in Lua).
 
-Por que en Python y no en Lua: CoreLibs hace
+Why in Python and not Lua: CoreLibs does
 
     if type(rect) == "userdata" then x, y, width, height = rect.x, rect.y, ... end
 
-para leer las metricas de un rect. Si nuestros rect/point/size fueran TABLAS Lua
-(que es lo natural, y como estaban antes en `pd/lib/geometry.lua`), esa rama se
-salta, width/height quedan nil y el juego muere con
-`attempt to compare string with number` dentro de CoreLibs/graphics.
+to read a rect metrics. If our rect/point/size were Lua TABLES (which is the
+natural thing, and how they were before in `pd/lib/geometry.lua`), that branch is
+skipped, width/height stay nil and the game dies with
+`attempt to compare string with number` inside CoreLibs/graphics.
 
-En la consola esos objetos son userdata. Exponiendolos como objetos Python, lupa
-los entrega con `type() == "userdata"` y el codigo del juego toma la rama correcta.
-Es el MISMO motivo por el que los sonidos son userdata (ver pd/luaobj.py).
+On the console those objects are userdata. Exposing them as Python objects, lupa
+delivers them with `type() == "userdata"` and the game code takes the right branch.
+It is the SAME reason sounds are userdata (see pd/luaobj.py).
 """
 
 from __future__ import annotations
@@ -22,12 +22,12 @@ from .luaobj import Permissive
 
 
 def _xy_of(a, b=None):
-    """Acepta (x, y), un Point/Vector2D o una tabla Lua con x/y."""
+    """Accepts (x, y), a Point/Vector2D or a Lua table with x/y."""
     if b is not None:
         return float(a), float(b)
     if a is None:
         return 0.0, 0.0
-    try:                                   # tabla Lua
+    try:                                   # Lua table
         return float(a["x"]), float(a["y"])
     except Exception:  # noqa: BLE001
         return float(getattr(a, "x", 0)), float(getattr(a, "y", 0))
@@ -142,10 +142,10 @@ class Rect(Permissive):
         return self
 
     def offset(self, dx, dy):
-        # La API MUEVE EL RECT EN SITIO (no devuelve uno nuevo): el juego hace
-        # `childRects[i]:offset(x, y)` y da por hecho que el rect ya esta movido.
-        # Devolver un rect nuevo dejaba TODOS los hijos del menu en (0,0) -- los
-        # items de Smolitaire se apilaban en la esquina y no se veian.
+        # The API MOVES THE RECT IN PLACE (does not return a new one): the game
+        # does `childRects[i]:offset(x, y)` and assumes the rect is already moved.
+        # Returning a new rect left ALL the menu children at (0,0) -- Smolitaire
+        # items piled up in the corner and were not visible.
         self.x += dx
         self.y += dy
         return self
@@ -232,22 +232,22 @@ class LineSegment(Permissive):
 
 
 class AffineTransform(Permissive):
-    """playdate.geometry.affineTransform: matriz afina 2D.
+    """playdate.geometry.affineTransform: 2D affine matrix.
 
         | m11 m12 tx |
         | m21 m22 ty |
 
-    `rotate`/`scale`/`translate` MUTAN la matriz (asi las usa el ejemplo
-    Asheteroids: crea una, rota, escala, y multiplica el polygon). `*` entre
-    dos transformadas COMPONE. Es un objeto Python (userdata) para que
-    `type(t) == "userdata"` y para que lupa mapee `__mul__` como metametodo.
+    `rotate`/`scale`/`translate` MUTATE the matrix (as the Asheteroids example
+    uses it: create one, rotate, scale, and multiply the polygon). `*` between
+    two transforms COMPOSES. It is a Python object (userdata) so that
+    `type(t) == "userdata"` and so lupa maps `__mul__` as a metamethod.
     """
 
     def __init__(self, m11=1.0, m12=0.0, m21=0.0, m22=1.0, tx=0.0, ty=0.0):
         self.m11, self.m12, self.m21, self.m22 = float(m11), float(m12), float(m21), float(m22)
         self.tx, self.ty = float(tx), float(ty)
 
-    # --- consulta ---
+    # --- query ---
     def transformPoint(self, x, y=None):
         if y is None:
             x, y = _xy_of(x)
@@ -257,7 +257,7 @@ class AffineTransform(Permissive):
     def copy(self):
         return AffineTransform(self.m11, self.m12, self.m21, self.m22, self.tx, self.ty)
 
-    # --- mutadores (devuelven self, como la API) ---
+    # --- mutators (return self, like the API) ---
     def reset(self):
         self.m11, self.m12, self.m21, self.m22 = 1.0, 0.0, 0.0, 1.0
         self.tx = self.ty = 0.0
@@ -286,7 +286,7 @@ class AffineTransform(Permissive):
     def rotate(self, angle=0, x=None, y=None):
         a = math.radians(angle or 0)
         c, s_ = math.cos(a), math.sin(a)
-        # rotar alrededor de (x, y) si se indica
+        # rotate around (x, y) if given
         if x is not None and y is not None:
             self.translate(-x, -y)
         m11, m12, m21, m22 = self.m11, self.m12, self.m21, self.m22
@@ -307,7 +307,7 @@ class AffineTransform(Permissive):
         return self
 
     def concat(self, other):
-        """self = self * other (aplica `other` primero, como la API)."""
+        """self = self * other (applies `other` first, like the API)."""
         o = other
         m11 = self.m11 * o.m11 + self.m12 * o.m21
         m12 = self.m11 * o.m12 + self.m12 * o.m22
@@ -332,7 +332,7 @@ class AffineTransform(Permissive):
         return self
 
     def __mul__(self, other):
-        # transform * transform -> composicion nueva
+        # transform * transform -> new composition
         return self.copy().concat(other)
 
 
@@ -369,7 +369,7 @@ class Polygon(Permissive):
         return self
 
     def getBounds(self):
-        """(x, y, w, h) de la caja que envuelve el polygon. Lo usa Asheteroids."""
+        """(x, y, w, h) of the box that wraps the polygon. Used by Asheteroids."""
         if not self.points:
             return (0.0, 0.0, 0.0, 0.0)
         xs = self.points[0::2]
@@ -382,7 +382,7 @@ class Polygon(Permissive):
         return Rect(x, y, w, h)
 
     def __mul__(self, t):
-        """polygon * affineTransform -> polygon transformado (metametodo __mul)."""
+        """polygon * affineTransform -> transformed polygon (__mul metamethod)."""
         if isinstance(t, AffineTransform):
             pts = []
             for i in range(0, len(self.points) - 1, 2):
@@ -395,7 +395,7 @@ class Polygon(Permissive):
 
 # ----------------------------------------------------------------------
 def build_geometry(table_from):
-    """Construye `playdate.geometry` con fabricas que devuelven userdata Python."""
+    """Builds `playdate.geometry` with factories that return Python userdata."""
     def _v2(x=0, y=0):
         return Vector2D(x, y)
 

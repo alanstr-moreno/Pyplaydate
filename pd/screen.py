@@ -1,21 +1,21 @@
-"""pd/screen.py — framebuffer 400x240 de Playdate, renderizado como la consola.
+"""pd/screen.py — Playdate 400x240 framebuffer, rendered like the console.
 
-Datos de la consola (doc oficial del SDK):
-  - Pantalla **400 x 240**, 1 bit por pixel (Sharp Memory LCD, reflectiva, SIN
-    retroiluminacion). OJO: NO son 320x320 -- muchos juegos hacen
-    `fillRect(0, 0, 400, 240)` y con el tamaño equivocado se les descuadra todo.
-  - Dos colores, no grises: el "negro" y el "blanco" reales son dos grises
-    (la doc del Simulator: "the display will use two gray colors instead of pure
+Console facts (official SDK docs):
+  - Screen **400 x 240**, 1 bit per pixel (Sharp Memory LCD, reflective, NO
+    backlight). NOTE: it is NOT 320x320 -- many games do
+    `fillRect(0, 0, 400, 240)` and with the wrong size everything is off.
+  - Two colors, not grays: the real "black" and "white" are two grays
+    (Simulator docs: "the display will use two gray colors instead of pure
     black and pure white, to match the Memory LCD display on the hardware").
 
-Colores: sacados de un asset del propio Simulator de Panic
-(`pdx-quicklook.png`), que da la tinta `#4a463f` y la carcasa `#ffb400`
-(Pantone 1235C). El "blanco" del LCD es un gris calido claro.
+Colors: taken from an asset of Panic's own Simulator (`pdx-quicklook.png`),
+which gives ink `#4a463f` and the case `#ffb400` (Pantone 1235C). The LCD
+"white" is a warm light gray.
 
-Como funciona: Graphics sigue dibujando en un canvas RGB normal (asi el codigo de
-dibujo no cambia) y AQUI, al presentar, se cuantiza a 2 colores y se colorea con
-la paleta. Eso reproduce el look real: 1 bit duro, sin antialiasing, con el tinte
-del LCD.
+How it works: Graphics keeps drawing on a normal RGB canvas (so the drawing
+code does not change) and HERE, at present time, it is quantized to 2 colors
+and colored with the palette. That reproduces the real look: hard 1-bit, no
+antialiasing, with the LCD tint.
 """
 
 from __future__ import annotations
@@ -25,21 +25,21 @@ import pygame
 WIDTH = 400
 HEIGHT = 240
 
-# Pantallas/paletas. `device` imita el hardware; `bw` es negro/blanco puro (lo que
-# pide Panic para capturas de la Catalog); `yellow` tinta el papel de amarillo.
+# Screens/palettes. `device` mimics the hardware; `bw` is pure black/white (what
+# Panic asks for Catalog captures); `yellow` tints the paper yellow.
 PALETTES = {
     "device": {"ink": (0x4a, 0x46, 0x3f), "paper": (0xc8, 0xc5, 0xb8)},
     "bw": {"ink": (0x00, 0x00, 0x00), "paper": (0xff, 0xff, 0xff)},
     "yellow": {"ink": (0x1a, 0x16, 0x0e), "paper": (0xff, 0xd0, 0x4a)},
 }
 
-CASE_YELLOW = (0xff, 0xb4, 0x00)     # Pantone 1235C, del asset de Panic
-CASE_SHADOW = (0x2a, 0x27, 0x22)     # borde interior de la pantalla
-BEZEL = 14                           # grosor del marco de la carcasa (px de juego)
+CASE_YELLOW = (0xff, 0xb4, 0x00)     # Pantone 1235C, from Panic asset
+CASE_SHADOW = (0x2a, 0x27, 0x22)     # inner screen border
+BEZEL = 14                           # case frame thickness (game px)
 
 
 class Screen:
-    """Canvas de dibujo (RGB) + presentacion 1-bit con la paleta de la consola."""
+    """Drawing canvas (RGB) + 1-bit presentation with the console palette."""
 
     def __init__(self, palette="device", bezel=BEZEL):
         self.width = WIDTH
@@ -50,7 +50,7 @@ class Screen:
         self.canvas = pygame.Surface((WIDTH, HEIGHT))
         self.canvas.fill((255, 255, 255))
 
-    # --- estado ---------------------------------------------------------
+    # --- state ---------------------------------------------------------
     @property
     def palette(self):
         return PALETTES[self.palette_name]
@@ -68,12 +68,12 @@ class Screen:
     def reset(self):
         self.canvas.fill((255, 255, 255))
 
-    # --- presentacion ---------------------------------------------------
+    # --- presentation ---------------------------------------------------
     def to_1bit(self):
-        """Cuantiza el canvas a 2 colores y lo pinta con la paleta del LCD.
+        """Quantizes the canvas to 2 colors and paints it with the LCD palette.
 
-        Umbral duro (la version estable). El dither ordenado se probo y se revirtio:
-        dejaba el juego peor cuando el estado del juego aun no dibuja bien.
+        Hard threshold (the stable version). Ordered dithering was tried and
+        reverted: it made the game worse while the game state does not draw well yet.
         """
         ink = self.palette["ink"]
         paper = self.palette["paper"]
@@ -84,11 +84,11 @@ class Screen:
         return mask.to_surface(setcolor=paper, unsetcolor=ink)
 
     def render(self, display, scale=2):
-        """Dibuja el marco de la carcasa + la pantalla escalada (nearest)."""
+        """Draws the case frame + the scaled screen (nearest)."""
         src = self.to_1bit()
-        # playdate.display.setScale(n): la consola dibuja a 400/n x 240/n y luego
-        # cada pixel ocupa n x n -> look "chunky". Se reproduce bajando y subiendo
-        # con nearest, que es exactamente eso.
+        # playdate.display.setScale(n): the console draws at 400/n x 240/n and
+        # then each pixel occupies n x n -> "chunky" look. Reproduced by scaling
+        # down and up with nearest, which is exactly that.
         s = max(1, int(getattr(self, "pixel_scale", 1) or 1))
         if s > 1:
             small = (WIDTH // s, HEIGHT // s)
@@ -100,7 +100,7 @@ class Screen:
 
         b = self.bezel * scale
         display.fill(CASE_YELLOW)
-        # borde oscuro fino alrededor del panel, como el bisel real
+        # thin dark border around the panel, like the real bezel
         pygame.draw.rect(display, CASE_SHADOW,
                          (b - 2 * scale, b - 2 * scale,
                           self.width * scale + 4 * scale,
