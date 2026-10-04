@@ -171,6 +171,7 @@ playdate_pi/
 │   ├── ARCHITECTURE.md     # per-component diagrams + wrapping + common bugs
 │   ├── IMPLEMENTING_APIS.md  # how to add APIs + tooling
 │   ├── COMPILED_GAMES.md  # compiled .pdx (LUA_32BITS, opcodes, import)
+│   ├── ROADMAP.md            # pending work, ordered by impact
 │   └── PFT_FONTS.md      # .pft font decoding
 ├── assets/screenshots/     # screenshots of the tested games
 ├── games/                  # the .pdx games (gitignored)
@@ -205,12 +206,14 @@ that could pass through metamethods because coroutines).
 
 ## Contribute / move forward together
 
-It is designed so other developers can extend it. To add an API or fix
-fidelity: read `docs/ARCHITECTURE.md` and `docs/IMPLEMENTING_APIS.md`, follow
-the patterns (Python method + registration in `_build_api()`, userdata, flat
-tables, callbacks) and record the lesson learned. The games in the list are
-good regression cases (the `tools/headless_test.py` runner steps every game
-and reports the first error).
+It is designed so other developers **and AI coding agents** can extend it.
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) (the rules and the API pattern)
+and [`docs/ROADMAP.md`](docs/ROADMAP.md) (the pending work, ordered by impact).
+To add an API or fix fidelity: read `docs/ARCHITECTURE.md` and
+`docs/IMPLEMENTING_APIS.md`, follow the patterns (Python method + registration
+in `_build_api()`, userdata, flat tables, callbacks) and record the lesson
+learned. The games in the list are good regression cases (the
+`tools/headless_test.py` runner steps every game and reports the first error).
 
 ## Key discoveries (summary)
 
