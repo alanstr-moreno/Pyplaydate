@@ -89,11 +89,27 @@ python playdate_pi.py "games/<game>.pdx" [--scale 2] [--palette device|bw|yellow
 Examples:
 
 ```bash
+# Run a game at 3x window size
+python playdate_pi.py "games/peru.pdx" --scale 3
+
+# 2x window (default)
+python playdate_pi.py "games/peru.pdx"
+
+# Headless: run 400 frames without a window and report errors (for testing)
+python playdate_pi.py "games/peru.pdx" --frames 400
+
+# With the game's logs and warnings about missing assets
+python playdate_pi.py "games/peru.pdx" --verbose
+
+# Other tested games
 python playdate_pi.py games/shrimpboom004.pdx --scale 3
 python playdate_pi.py "games/Fishing Simulator.pdx" --palette device
 python playdate_pi.py games/FlippyFish.pdx --frames 400   # headless (test)
 python playdate_pi.py games/shrimpboom004.pdx --verbose     # log API/assets
 ```
+
+> The game must be at `games/peru.pdx`. If it is elsewhere, use the full path,
+> e.g. `python playdate_pi.py "/path/to/peru.pdx" --scale 3`.
 
 ### Controls (map to D-pad + 2 buttons + crank)
 
