@@ -247,7 +247,7 @@ Any amount is appreciated. Thank you!
 
 ## License
 
-*(pick whichever you prefer — suggestion: MIT)*
+Released under the **MIT License**. See [LICENSE](LICENSE).
 
 ---
 
