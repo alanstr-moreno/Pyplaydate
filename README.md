@@ -234,6 +234,17 @@ learned. The games in the list are good regression cases (the
 
 Each is detailed (cause + fix) in `docs/ARCHITECTURE.md`.
 
+## Support / Donate
+
+If this project helps you, consider a small donation to support the ongoing
+research and development (electronics research, emulation, reverse-engineering):
+
+[![Donate with PayPal](https://www.paypalobjects.com/paypal-ui/logos/svg/paypal-mark-color.svg)](https://www.paypal.com/donate/?business=59PBMU7RG4CBS&no_recurring=0&currency_code=USD)
+
+**Donate via PayPal:** <https://www.paypal.com/donate/?business=59PBMU7RG4CBS&no_recurring=0&currency_code=USD>
+
+Any amount is appreciated. Thank you!
+
 ## License
 
 *(pick whichever you prefer — suggestion: MIT)*
