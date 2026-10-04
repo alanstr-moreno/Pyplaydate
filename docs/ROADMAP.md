@@ -32,23 +32,19 @@ Check `Synth.playNote` receives `(freq, vol, length, when)` with `when` absolute
 
 ---
 
-## 2. FlippyFish score does not increment — `[open]`
+## 2. FlippyFish score does not increment — `[resolved]`
 
-**Problem**: the fish flies and collides, but `score` stays 0. The
-`collisionResponse` fires, but the "pass through the gap" logic never calls
-`addOne`.
+**Status**: fixed and confirmed by the user — the score now increments when the
+fish passes through the gap.
 
-**Where**: `pd/sprite.py` (`moveWithCollisions`, `sprite_response_call`,
-`alpha_collision`), `pd/runtime.py` (`_spr_move_collisions`).
-
-**What to do**: trace when the fish crosses the seaweed gap and whether the
-score sprite's `collisionResponse` is invoked on the right frame. The fish
-falls 20px/frame, so on first contact its pixels may not touch yet
+**Where it was**: `pd/sprite.py` (`moveWithCollisions`, `sprite_response_call`,
+`alpha_collision`), `pd/runtime.py` (`_spr_move_collisions`). The fish falls
+20px/frame, so on first contact its pixels may not touch yet
 (`alphaCollision=false`); gameOver/score only fire on a later frame while still
 overlapping.
 
-**Verify**: run `FlippyFish.pdx`, play past the first gap, confirm the score
-increments. Instrument `addOne` / the score sprite's `collisionResponse`.
+**Verify (regression)**: run `FlippyFish.pdx`, play past the first gap, confirm
+the score increments.
 
 ---
 
