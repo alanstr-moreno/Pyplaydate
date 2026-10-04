@@ -239,7 +239,7 @@ Each is detailed (cause + fix) in `docs/ARCHITECTURE.md`.
 If this project helps you, consider a small donation to support the ongoing
 research and development (electronics research, emulation, reverse-engineering):
 
-[![Donate with PayPal](https://www.paypalobjects.com/paypal-ui/logos/svg/paypal-mark-color.svg)](https://www.paypal.com/donate/?business=59PBMU7RG4CBS&no_recurring=0&currency_code=USD)
+[<img src="https://www.paypalobjects.com/paypal-ui/logos/svg/paypal-mark-color.svg" alt="Donate with PayPal" width="120">](https://www.paypal.com/donate/?business=59PBMU7RG4CBS&no_recurring=0&currency_code=USD)
 
 **Donate via PayPal:** <https://www.paypal.com/donate/?business=59PBMU7RG4CBS&no_recurring=0&currency_code=USD>
 
