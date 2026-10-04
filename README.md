@@ -280,3 +280,8 @@ Released under the **MIT License**. See [LICENSE](LICENSE).
 
 Built with the [Playdate SDK](https://play.date/dev/), [lupa](https://github.com/scoder/lupa)
 and [pygame-ce](https://pyga.me/).
+
+---
+
+**LIMA - PERU**
+**PHC**
