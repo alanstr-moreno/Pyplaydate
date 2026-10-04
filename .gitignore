@@ -1,0 +1,20 @@
+# Juegos .pdx (homebrew / itch.io / SDK) — NO se suben al repo
+# (suelen ser grandes y pueden tener licencia). Ponlos localmente junto a este
+# README para correrlos, o descárgalos tú.
+*.pdx
+*.pdz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Capturas de depuración
+tmp_*.png
+*.log
+
+# Entorno
+.DS_Store
+scratch/
+*.so
