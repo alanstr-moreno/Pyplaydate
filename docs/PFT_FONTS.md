@@ -19,10 +19,10 @@ The Playdate SDK ships **`.fnt` (font, PLAIN TEXT, documented) and `.pft`
 compiled with the same names**. That gives an **exact oracle**: the glyph list
 with its widths is known, and the binary is available.
 
-- SDK: `/Users/mac/Developer/PlaydateSDK`, compiler `bin/pdc`.
+- SDK: `the local Playdate SDK install`, compiler `bin/pdc`.
 - Oracle: `mini.pft`, compiled by us trimming `Asheville-Sans-14-Bold.fnt` to
   16 known glyphs (`space ! " # $ % & ' ( ) * + , - . /`, widths 3,2,5,9,8,12,11,3,5,5,8,8,3,6,2,6).
-  Reproducible build in `/tmp` → `~/.hermes/cache/scratch/minifont`.
+  Reproducible build in `/tmp` → `minifont/`.
 - Result: **16/16 correct advances** with the format below.
 - Cross-validation: **96/96** glyphs in `twenty-minute-roman-17.pft` with the
   loose script `scratch/pft_loose.py`.

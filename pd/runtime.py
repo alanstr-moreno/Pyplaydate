@@ -253,7 +253,9 @@ class Playdate:
         self._emu.running = False
 
 
-SDK_CORELIBS_DEFAULT = "/Users/mac/Developer/PlaydateSDK/CoreLibs"
+SDK_CORELIBS_DEFAULT = os.environ.get(
+    "PLAYDATE_SDK_PATH", os.path.expanduser("~/Developer/PlaydateSDK/CoreLibs")
+)
 
 # El SDK usa el DIALECTO Lua de Playdate, que anade operadores de asignacion
 # compuesta (`a -= 1`, `t.x += y`, `t[i] *= 2`). El Lua de lupa es 5.4 estandar,

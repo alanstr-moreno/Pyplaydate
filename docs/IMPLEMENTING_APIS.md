@@ -177,7 +177,7 @@ playdate.display.setFlipped(x, y)     / getFlipped()
 playdate.display.setMosaic(x, [y])    / getMosaic()   -- dev effect
 playdate.display.flush()
 ```
-⚠️ **The API uses `getWidth()`/`getHeight()`, NOT `getScreenWidth()`** (already
+ **The API uses `getWidth()`/`getHeight()`, NOT `getScreenWidth()`** (already
 fixed in `runtime.py`, which keeps `getScreenWidth` as an alias for convenience).
 
 `setInverted(true)` → draw in negative: in `Screen.render`, if `inverted`, use
@@ -512,7 +512,7 @@ so tests and the game have a menu.
 | `fillCircleInRect` / `drawEllipseInRect` | `pygame.draw.ellipse` (fill / `width=1`) |
 | `fillCircleAtPoint` | `pygame.draw.circle` |
 | `drawPolygon` / `fillPolygon` | `pygame.draw.polygon` |
-| `drawArc` | `pygame.draw.arc` (⚠️ convert angle: 0°=up, clockwise) |
+| `drawArc` | `pygame.draw.arc` ( convert angle: 0°=up, clockwise) |
 | `setClipRect` / `clearClipRect` | `Surface.set_clip` / `set_clip(None)` |
 | `pushContext` / `popContext` | your own state stack |
 | `setDrawOffset` | an offset of your own added to every coordinate |

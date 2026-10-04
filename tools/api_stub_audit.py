@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-STUB = "/Users/mac/Developer/PlaydateSDK/CoreLibs/__stub.lua"
+STUB = os.environ.get("PLAYDATE_SDK_PATH", os.path.expanduser("~/Developer/PlaydateSDK/CoreLibs/__stub.lua"))
 
 
 def stub_paths():

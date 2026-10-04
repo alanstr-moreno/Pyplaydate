@@ -1,4 +1,4 @@
-# 🎮 Playdate-Pi — Playdate emulator in Python
+# Playdate-Pi — Playdate emulator in Python
 
 A **runtime/emulator for the Playdate** written in Python that runs **real
 compiled games `.pdx`** (Lua 5.4 / 32-bit bytecode), reimplementing the
@@ -13,29 +13,29 @@ runs the same on your Mac and on a Raspberry Pi Zero 2 W.
 > It works with **homebrew / itch.io unencrypted games** and SDK examples.
 > Encrypted Catalog games (`bit 0x40000000`) are not executed.
 
-## 📸 Tested games
+## Tested games
 
 From **itch.io** (homebrew):
 
 | Game | Screenshot | Status |
 |------|------------|--------|
-| **Shrimp Boom 004** | ![shrimpboom](assets/screenshots/shrimpboom.png) | ✅ 4-direction movement, shooting, HUD, sound (bubbles/pop/death) |
-| **Playdate Broken Screen** | ![playdatebrokenscreen](assets/screenshots/playdatebrokenscreen.png) | ✅ `.pdi` images decoded and drawn |
-| **Fishing Simulator** | ![fishing](assets/screenshots/fishing.png) | ✅ Menu, scene, sound (catch/select/confirm) |
-| **Smolitaire 1.0.1** | ![smolitaire](assets/screenshots/smolitaire.png) | ✅ Menu, gameplay, visible cursor (hand) |
+| **Shrimp Boom 004** | ![shrimpboom](assets/screenshots/shrimpboom.png) |  4-direction movement, shooting, HUD, sound (bubbles/pop/death) |
+| **Playdate Broken Screen** | ![playdatebrokenscreen](assets/screenshots/playdatebrokenscreen.png) |  `.pdi` images decoded and drawn |
+| **Fishing Simulator** | ![fishing](assets/screenshots/fishing.png) |  Menu, scene, sound (catch/select/confirm) |
+| **Smolitaire 1.0.1** | ![smolitaire](assets/screenshots/smolitaire.png) |  Menu, gameplay, visible cursor (hand) |
 
 From the **Playdate SDK** (compiled with `pdc`):
 
 | Game | Screenshot | Status |
 |------|------------|--------|
-| **Flippy Fish** | ![flippyfish](assets/screenshots/flippyfish.png) | ✅ Animated fish, collisions, score, floor, seaweed |
-| **Sprite Collision Masks** | ![spritecollisionmasks](assets/screenshots/spritecollisionmasks.png) | ✅ Group collision masks, bounces, sprites stay inside the box |
+| **Flippy Fish** | ![flippyfish](assets/screenshots/flippyfish.png) |  Animated fish, collisions, score, floor, seaweed |
+| **Sprite Collision Masks** | ![spritecollisionmasks](assets/screenshots/spritecollisionmasks.png) |  Group collision masks, bounces, sprites stay inside the box |
 
 The game files themselves live in `games/` (see `.gitignore` — they are not
 committed to the repo). Download the `.pdx` from itch.io / the SDK and drop
 them there.
 
-## 🧰 Requirements
+## Requirements
 
 - **Python 3.10+** (tested on 3.14)
 - **pygame-ce** `>=2.5` (the classic `pygame` won't do)
@@ -51,11 +51,9 @@ pip install -r requirements.txt
 > **lupa + LUA_32BITS**: Playdate compiles `.pdz` for 32-bit Lua (floats are
 > `double`, but offsets are 32-bit). lupa must be compiled/linked with that
 > variant, or compiled chunks won't load and crash. The vendored source is in
-> `vendor/lupa/` and `tools/build_lua32.sh` builds it. (On Alan's Mac,
-> Hermes's Python at `~/.hermes/tools/python-3.14*/bin/python3` already has
-> everything set up.)
+> `vendor/lupa/` and `tools/build_lua32.sh` builds it.
 
-## ▶️ How to run
+## How to run
 
 ```bash
 python playdate_pi.py "games/<game>.pdx" [--scale 2] [--palette device|bw|yellow] [--frames N] [--verbose]
@@ -80,7 +78,7 @@ python playdate_pi.py games/shrimpboom004.pdx --verbose     # log API/assets
 | Q / E | Crank (counter-clockwise / clockwise) |
 | ESC | Quit |
 
-## 🏗️ How it works (architecture map)
+## How it works (architecture map)
 
 Four layers turn the compiled `.pdx` into pixels and audio. Each has its own
 section in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) with diagrams.
@@ -119,7 +117,7 @@ Short version of each part:
    operators (`polygon * transform`, `imagetable[i]`, `sprite:update()`
    defaults). lupa gotchas documented in `ARCHITECTURE.md`.
 
-## 📁 Project structure
+## Project structure
 
 ```text
 playdate_pi/
@@ -148,7 +146,7 @@ playdate_pi/
 │   └── lib/                # Lua bridges (playdate_ext.lua, etc.)
 ```
 
-## ✅ Status and limitations
+## Status and limitations
 
 **Works**: loads unencrypted `pdz`; decodes `.pdi/.pdt/.pft/.pda`; API of
 `graphics`, `sound`, `sprite`, `geometry`, `display`, `button`, `file`.
@@ -162,7 +160,7 @@ the `.pdx` emit warnings; some `sound` effects/APIs (sequence, filters) are
 permissive stubs. The lupa bridge writes Lua fields (it never reads fields
 that could pass through metamethods because coroutines).
 
-## 🤝 Contribute / move forward together
+## Contribute / move forward together
 
 It is designed so other developers can extend it. To add an API or fix
 fidelity: read `docs/ARCHITECTURE.md` and `docs/IMPLEMENTING_APIS.md`, follow
@@ -171,7 +169,7 @@ tables, callbacks) and record the lesson learned. The games in the list are
 good regression cases (the `tools/headless_test.py` runner steps every game
 and reports the first error).
 
-## ⚠️ Key discoveries (summary)
+## Key discoveries (summary)
 
 1. **lupa does not map Python `__mul__` to Lua metamethods**: use
    `debug.setmetatable` with a **Lua** function (not Python) as `__index`.

@@ -127,7 +127,7 @@ dithered shadow, legible and not mirrored (confirms the MSB bit-order).
 
 ## 5. "Handle" pattern for objects
 
-Because of the **lupa bug** (see `README`/`GUIA`), NEVER expose nested Python
+Because of the **lupa bug** (see `README`/`IMPLEMENTING_APIS`), NEVER expose nested Python
 objects to Lua. Playdate "objects" are **Lua tables with `__id`**, and the real
 state lives in Python:
 
@@ -186,17 +186,17 @@ missing, errors = apidbg.report(rt)
 
 | Stage | State |
 |---|---|
-| Read `.pdx`/`.pdz`, detect DRM | ✅ |
-| Extract bytecode and assets | ✅ |
-| Patched Lua 5.4.3 (LUA_32BITS + opcode remap) | ✅ |
-| Load all 25 Smolitaire chunks | ✅ |
-| Run bytecode (`import()` actually works) | ✅ |
-| Decode `.pdi`/`.pdt` (visually verified) | ✅ |
-| `graphics.image` / `graphics.imagetable` | ✅ |
-| `graphics.sprite` (+ AABB collisions) | ✅ |
-| `playdate.geometry` (pure Lua) | ✅ |
-| `playdate.sound` (shim) / menu / `metadata` / `kButton*` | ✅ |
-| **First rendered frame of the compiled game** | ✅ |
+| Read `.pdx`/`.pdz`, detect DRM |  |
+| Extract bytecode and assets |  |
+| Patched Lua 5.4.3 (LUA_32BITS + opcode remap) |  |
+| Load all 25 Smolitaire chunks |  |
+| Run bytecode (`import()` actually works) |  |
+| Decode `.pdi`/`.pdt` (visually verified) |  |
+| `graphics.image` / `graphics.imagetable` |  |
+| `graphics.sprite` (+ AABB collisions) |  |
+| `playdate.geometry` (pure Lua) |  |
+| `playdate.sound` (shim) / menu / `metadata` / `kButton*` |  |
+| **First rendered frame of the compiled game** |  |
 | Full playable game | ⬜ missing API + 1 snag |
 
 **Progress measured with the debugger** (Smolitaire): 88 → 55 → 34 → 8 → 5 → **0
