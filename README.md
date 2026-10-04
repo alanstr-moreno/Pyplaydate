@@ -13,6 +13,33 @@ runs the same on your Mac and on a Raspberry Pi Zero 2 W.
 > It works with **homebrew / itch.io unencrypted games** and SDK examples.
 > Encrypted Catalog games (`bit 0x40000000`) are not executed.
 
+## Introduction
+
+This HLE (High-Level Emulation) emulator is still in development and has been
+created strictly for educational and research purposes. Its main goal is to
+provide a lightweight execution environment for titles created and compiled in
+Lua using the Playdate SDK. Architecturally, the project uses Pygame to manage
+the wrappers.
+
+The system is optimized to operate efficiently on low-resource hardware,
+designed with a particular focus on the Raspberry Pi Zero 2W for its
+integration into custom handheld consoles. For now, its compatibility is
+strictly limited to homebrew software and unofficial catalog games.
+
+### Español / Introducción
+
+Este emulador HLE (High-Level Emulation) sigue en fase de desarrollo y ha sido
+creado estrictamente con fines educativos y de investigación. Su objetivo
+principal es ofrecer un entorno de ejecución ligero para títulos creados y
+compilados en Lua con el SDK de Playdate. A nivel arquitectónico, el proyecto
+hace uso de Pygame para gestionar los wrappers.
+
+El sistema está optimizado para operar eficientemente en hardware de bajos
+recursos, diseñado con un enfoque particular en la Raspberry Pi Zero 2W para su
+integración en consolas portátiles personalizadas. Por ahora, su compatibilidad
+está limitada de forma exclusiva a software homebrew y juegos de catálogos no
+oficiales.
+
 ## Quick start (no Playdate SDK, no console needed)
 
 You do **not** need the Playdate SDK, a Playdate console, or any game source
