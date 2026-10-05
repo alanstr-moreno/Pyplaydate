@@ -86,8 +86,19 @@ class Graphics:
     def getBackgroundColor(self):
         return getattr(self, "_bg_color", None)
 
-    def clear(self, color=0):
-        self._canvas.fill(BLACK if color else WHITE)
+    def clear(self, color=None):
+        """clear([color]): fills the display.
+
+        Per the SDK, fills with `color` if given, else the background color set
+        by setBackgroundColor(), else white (the console default). Colors follow
+        kColorBlack=0 / kColorWhite=1. The old code did `BLACK if color else
+        WHITE`, which turned clear(kColorWhite=1) into BLACK — a game that
+        cleared white then drew a black rect came out fully black.
+        """
+        if color is None:
+            color = self.getBackgroundColor()
+        black = (int(color) == 0) if color is not None else False
+        self._canvas.fill(BLACK if black else WHITE)
 
     def setPixel(self, x, y, color=1):
         px, py = self._xy(x, y)
