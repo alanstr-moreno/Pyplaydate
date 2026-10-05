@@ -6,6 +6,7 @@ playback methods make real sound.
 """
 
 import os
+import re
 import struct
 
 from .luaobj import Permissive
@@ -20,6 +21,58 @@ _CLOCK_START = _time.monotonic()
 def get_current_time():
     """playdate.sound.getCurrentTime(): seconds since the engine started."""
     return _time.monotonic() - _CLOCK_START
+
+
+# --- note scheduler (one background thread instead of one per note) -----
+# A sequence can schedule many hundreds of notes (Kickflip: 952). Spawning a
+# threading.Timer per note would exhaust the OS (and crash a Raspberry Pi), so
+# all scheduled notes go into a single heap drained by one worker thread.
+import heapq as _heapq
+import threading as _threading
+
+_SCHED = []                      # heap: (when, seq, synth, freq, dur, vol)
+_SCHED_LOCK = _threading.Lock()
+_SCHED_WORKER = None
+_SCHED_SEQ = 0
+
+
+def _ensure_scheduler():
+    global _SCHED_WORKER
+    if _SCHED_WORKER is not None:
+        return
+    def _run():
+        while True:
+            now = get_current_time()
+            due = []
+            with _SCHED_LOCK:
+                while _SCHED and _SCHED[0][0] <= now:
+                    due.append(_heapq.heappop(_SCHED))
+            for _when, _s, synth, freq, dur, vol in due:
+                try:
+                    synth._play_now(freq, dur, vol)
+                except Exception:  # noqa: BLE001
+                    pass
+            _time.sleep(0.006)
+    _SCHED_WORKER = _threading.Thread(target=_run, daemon=True)
+    _SCHED_WORKER.start()
+
+
+def _schedule_note(when, synth, freq, dur, vol):
+    global _SCHED_SEQ
+    _ensure_scheduler()
+    _SCHED_SEQ += 1
+    with _SCHED_LOCK:
+        _heapq.heappush(_SCHED, (float(when), _SCHED_SEQ, synth, freq, dur, vol))
+
+
+def _clear_scheduled(synth=None):
+    """Drops pending notes (optionally only one synth's) — used by noteOff/stop."""
+    with _SCHED_LOCK:
+        if synth is None:
+            _SCHED.clear()
+        else:
+            _SCHED[:] = [n for n in _SCHED if n[2] is not synth]
+            _heapq.heapify(_SCHED)
 
 
 def _ensure_mixer():
@@ -275,29 +328,31 @@ class Synth(Permissive):
         # `when` is ABSOLUTE on the sound engine clock (getCurrentTime), NOT
         # relative to now. Kickflip's music schedules notes at absolute song
         # times; if interpreted as "from now", the instruments bunch up.
-        # delay = when - current_clock.
         now = get_current_time()
         target = float(when) if when else now
-        delay = max(0.0, target - now)
-
-        def _play():
-            self._sound = self._make_tone(self._freq, dur)
-            if self._sound is not None:
-                self._sound.set_volume(self._volume)
-                self._sound.play()
-            self._playing = True
-
-        if delay > 0:
-            import threading
-            threading.Timer(delay, _play).start()
+        if target <= now:
+            self._play_now(self._freq, dur, self._volume)
         else:
-            _play()
+            _schedule_note(target, self, self._freq, dur, self._volume)
+
+    def _play_now(self, freq, dur, vol):
+        """Renders and plays a tone immediately (called by the scheduler)."""
+        s = self._make_tone(freq, dur)
+        if s is not None:
+            try:
+                s.set_volume(float(vol))
+            except Exception:  # noqa: BLE001
+                pass
+            s.play()
+        self._sound = s
+        self._playing = True
 
     def playMIDINote(self, note, vol=1.0, *a):
         freq = 440.0 * (2.0 ** ((int(note) - 69) / 12.0))
         self.playNote(freq, vol)
 
     def noteOff(self, *a):
+        _clear_scheduled(self)
         if self._sound is not None:
             self._sound.stop()
         self._playing = False
@@ -377,3 +432,275 @@ class Channel(Permissive):
 
     def setPan(self, *a):
         pass
+
+
+# ----------------------------------------------------------------------
+# Sequencer: playdate.sound.sequence / playdate.sound.track
+#
+# Real games (e.g. Kickflip Coast) build their music with a sequencer:
+#   local seq = playdate.sound.sequence.new()
+#   local tr  = seq:addTrack()            -- no arg -> new track
+#   tr:setInstrument(synth)
+#   tr:addNote(step, note, length, velocity)
+#   seq:setTempo(stepsPerSecond)          -- NOTE: steps per second, not BPM
+#   seq:play()
+#
+# Notes are scheduled through the track's Synth using absolute engine time
+# (Synth.playNote already handles the `when` absolute scheduling).
+
+_NOTE_SEMITONE = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
+
+
+def _note_to_freq(note):
+    """MIDI note number or note name ("C4", "Db3") -> frequency in Hz."""
+    if isinstance(note, str):
+        m = re.match(r"\s*([A-Ga-g])([#b]?)(-?\d+)", note)
+        if not m:
+            return 440.0
+        letter, acc, octv = m.group(1).lower(), m.group(2), int(m.group(3))
+        semi = _NOTE_SEMITONE.get(letter, 0)
+        if acc == "#":
+            semi += 1
+        elif acc == "b":
+            semi -= 1
+        midi = (octv + 1) * 12 + semi
+    else:
+        try:
+            midi = int(note)
+        except (TypeError, ValueError):
+            return 440.0
+    return 440.0 * (2.0 ** ((midi - 69) / 12.0))
+
+
+def _note_fields(obj):
+    """Reads step/note/length/velocity from a dict or table-like object."""
+    def g(k, d=None):
+        try:
+            return obj[k]
+        except Exception:  # noqa: BLE001
+            try:
+                return getattr(obj, k, d)
+            except Exception:  # noqa: BLE001
+                return d
+    return g("step", 0), g("note", 0), g("length", 1), g("velocity", 1.0)
+
+
+class Track(Permissive):
+    """playdate.sound.track: a list of note events played by an instrument."""
+
+    def __init__(self, *args):
+        self.notes = []          # (step, note, length, velocity)
+        self.instrument = None   # usually a Synth
+        self.muted = False
+        self.enabled = True
+        self.volume = 1.0
+
+    def addNote(self, *a):
+        if len(a) == 1 and a[0] is not None and not isinstance(a[0], (int, float, str)):
+            self.notes.append(_note_fields(a[0]))     # table/dict form
+        elif a:
+            step = a[0]
+            note = a[1] if len(a) > 1 else 0
+            length = a[2] if len(a) > 2 else 1
+            vel = a[3] if len(a) > 3 and a[3] is not None else 1.0
+            self.notes.append((step, note, length, vel))
+
+    def addNotes(self, notes, *a):
+        for n in (notes or []):
+            try:
+                self.addNote(n)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def setNotes(self, notes, *a):
+        self.notes = []
+        self.addNotes(notes)
+
+    def getNotes(self, *a):
+        return [{"step": s, "note": n, "length": l, "velocity": v}
+                for (s, n, l, v) in self.notes]
+
+    def setInstrument(self, inst, *a):
+        self.instrument = inst
+
+    def getInstrument(self, *a):
+        return self.instrument
+
+    def setMuted(self, m, *a):
+        self.muted = bool(m)
+
+    def isMuted(self, *a):
+        return self.muted
+
+    def setEnabled(self, e, *a):
+        self.enabled = bool(e)
+
+    def isEnabled(self, *a):
+        return self.enabled
+
+    def setVolume(self, v, *a):
+        try:
+            self.volume = float(v)
+        except (TypeError, ValueError):
+            pass
+
+    def getVolume(self, *a):
+        return self.volume
+
+    def getLength(self, *a):
+        end = 0
+        for step, _n, length, _v in self.notes:
+            try:
+                end = max(end, float(step) + float(length))
+            except (TypeError, ValueError):
+                pass
+        return end
+
+    def getNotesActive(self, *a):
+        return 0
+
+
+class Sequence(Permissive):
+    """playdate.sound.sequence: schedules its tracks' notes over time."""
+
+    def __init__(self, *args):
+        self.tracks = []
+        self.tempo = 4.0            # steps per second (playdate setTempo)
+        self.playing = False
+        self.loop_start = 0
+        self.loop_end = 0
+        self.loop_count = 0
+        self._start = 0.0
+        self._step = 0
+        self._loop_timer = None
+
+    # -- structure --
+    def addTrack(self, *a):
+        if a and a[0] is not None:
+            self.tracks.append(a[0])
+            return a[0]
+        t = Track()                 # no arg -> create and return a new track
+        self.tracks.append(t)
+        return t
+
+    def getTrackCount(self, *a):
+        return len(self.tracks)
+
+    def getTrackAtIndex(self, i, *a):
+        try:
+            return self.tracks[int(i)]
+        except (IndexError, TypeError, ValueError):
+            return None
+
+    def setTrackAtIndex(self, i, track, *a):
+        try:
+            self.tracks[int(i)] = track
+        except (IndexError, TypeError, ValueError):
+            pass
+
+    def removeTrackAtIndex(self, i, *a):
+        try:
+            del self.tracks[int(i)]
+        except (IndexError, TypeError, ValueError):
+            pass
+
+    # -- timing --
+    def setTempo(self, sps, *a):
+        try:
+            self.tempo = float(sps) or 4.0
+        except (TypeError, ValueError):
+            pass
+
+    def getTempo(self, *a):
+        return self.tempo
+
+    def setLoops(self, *a):
+        # setLoops(startStep, endStep, [loopCount]) or setLoops(loopCount)
+        if len(a) >= 2:
+            self.loop_start = int(a[0] or 0)
+            self.loop_end = int(a[1] or 0)
+            self.loop_count = int(a[2]) if len(a) > 2 and a[2] is not None else 0
+        elif a:
+            self.loop_end = int(self.getLength())
+            self.loop_count = int(a[0] or 0)
+        else:
+            self.loop_end = int(self.getLength())
+            self.loop_count = 0
+
+    def getLength(self, *a):
+        n = 0
+        for tr in self.tracks:
+            try:
+                n = max(n, tr.getLength())
+            except Exception:  # noqa: BLE001
+                pass
+        return n
+
+    def getCurrentStep(self, *a):
+        return self._step
+
+    def goToStep(self, step, play=None, *a):
+        try:
+            self._step = int(step or 0)
+        except (TypeError, ValueError):
+            self._step = 0
+
+    # -- playback --
+    def play(self, *a):
+        self.playing = True
+        self._start = get_current_time()
+        self._schedule_pass(self._start)
+        if self.loop_end > self.loop_start and self.tempo > 0:
+            self._schedule_loop()
+
+    def _schedule_pass(self, base):
+        sec_per_step = (1.0 / self.tempo) if self.tempo > 0 else 0.25
+        for tr in self.tracks:
+            if getattr(tr, "muted", False) or not getattr(tr, "enabled", True):
+                continue
+            inst = getattr(tr, "instrument", None)
+            if inst is None:
+                continue
+            for step, note, length, vel in getattr(tr, "notes", []):
+                try:
+                    when = base + float(step) * sec_per_step
+                    dur = max(0.02, float(length) * sec_per_step)
+                    vol = float(vel) * float(getattr(tr, "volume", 1.0))
+                    inst.playNote(_note_to_freq(note), vol, dur, when)
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def _schedule_loop(self):
+        import threading
+        period = max(0.05, (self.loop_end - self.loop_start) / self.tempo)
+
+        def _tick():
+            if not self.playing:
+                return
+            self._schedule_pass(get_current_time())
+            self._loop_timer = threading.Timer(period, _tick)
+            self._loop_timer.daemon = True
+            self._loop_timer.start()
+
+        self._loop_timer = threading.Timer(period, _tick)
+        self._loop_timer.daemon = True
+        self._loop_timer.start()
+
+    def stop(self, *a):
+        self.playing = False
+        if self._loop_timer is not None:
+            self._loop_timer.cancel()
+            self._loop_timer = None
+        self.allNotesOff()
+
+    def isPlaying(self, *a):
+        return self.playing
+
+    def allNotesOff(self, *a):
+        for tr in self.tracks:
+            inst = getattr(tr, "instrument", None)
+            if inst is not None:
+                try:
+                    inst.noteOff()
+                except Exception:  # noqa: BLE001
+                    pass

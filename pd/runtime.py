@@ -1260,7 +1260,7 @@ class Runtime:
 
     def _sound_table(self):
         """playdate.sound — USERDATA objects (see pd/sound.py), not tables."""
-        from .sound import Channel, Instrument, SoundPlayer, Synth
+        from .sound import Channel, Instrument, SoundPlayer, Synth, Sequence, Track
         from .sound import get_current_time as _sound_get_current_time
 
         T = self.lua.table_from
@@ -1289,8 +1289,8 @@ class Runtime:
             "kWaveSawtooth": 4,
             "effect": T({"new": lambda *a: None}),
             "source": T({"new": lambda *a: None}),
-            "sequence": T({"new": self._audio_stub}),
-            "track": T({"new": self._audio_stub}),
+            "sequence": T({"new": Sequence}),
+            "track": T({"new": Track}),
             "controlsignal": T({"new": self._audio_stub}),
             "lfo": T({"new": self._audio_stub}),
             "envelope": T({"new": self._audio_stub}),
