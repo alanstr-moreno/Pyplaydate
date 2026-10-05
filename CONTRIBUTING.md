@@ -27,6 +27,9 @@ pip install -r requirements.txt
 sh tools/build_lua32.sh        # builds the Lua 5.4 / 32-bit lupa (one time)
 ```
 
+On a Raspberry Pi Zero 2 W, `sh install_pi.sh` does all of the above (system
+packages included) in one command.
+
 Run a game:
 
 ```bash

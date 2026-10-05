@@ -57,6 +57,14 @@ sh tools/build_lua32.sh
 python playdate_pi.py "games/<game>.pdx" --scale 3
 ```
 
+**On a Raspberry Pi Zero 2 W, steps 1 and 2 are one command:**
+
+```bash
+sh install_pi.sh          # installs system packages, venv, requirements and the Lua bridge
+source .venv/bin/activate
+python playdate_pi.py "games/<game>.pdx" --scale 1
+```
+
 That's it. Drop any unencrypted `.pdx` (from itch.io, homebrew, or the SDK
 examples) into `games/` and run it. The emulator decodes the compiled formats
 and reimplements the `playdate.*` API itself — the SDK is only needed if you
@@ -150,7 +158,18 @@ python playdate_pi.py games/shrimpboom004.pdx --verbose     # log API/assets
 
 ## Raspberry Pi Zero 2 W
 
-The emulator is written to run on the Pi with no code changes. One-time setup:
+The emulator is written to run on the Pi with no code changes.
+
+**One-command setup (recommended):**
+
+```bash
+sh install_pi.sh
+source .venv/bin/activate
+python playdate_pi.py "games/peru.pdx" --scale 1
+```
+
+`install_pi.sh` runs all of the following for you; do it by hand only if you
+prefer:
 
 ```bash
 # 1. System packages (compiler + Python headers + curl)
@@ -226,6 +245,7 @@ Short version of each part:
 ```text
 playdate_pi/
 ├── playdate_pi.py          # entry point (CLI)
+├── install_pi.sh           # one-shot Raspberry Pi setup
 ├── requirements.txt
 ├── README.md
 ├── docs/
