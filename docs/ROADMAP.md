@@ -9,26 +9,20 @@ something else first.
 
 ---
 
-## 1. Kickflip background music (sequencer) — `[open]`
+## 1. Kickflip background music (sequencer) — `[resolved]`
 
-**Problem**: Kickflip Coast's background music does not play. The `.pdx` has no
-`.pda` files — the music is **synthesized** (a sequence of `Synth` + `playNote`
-calls). The current `Synth.playNote` schedules notes but the sequencer structure
-is not read.
+**Status**: implemented. `Sequence` and `Track` now live in `pd/sound.py` and
+are wired into `playdate.sound` in `pd/runtime.py` (`_sound_table`). Kickflip
+Coast builds 8 tracks with ~950 notes at tempo 8 steps/sec and `play()` now
+schedules them through the tracks' Synths. A single background scheduler thread
+(a heap of pending notes) plays them, so hundreds of notes do not spawn hundreds
+of threads.
 
-**Data**: the game's music is a JSON-like structure per song:
-`{id, bpm, name, notes[channels][...], splits, loopFrom, ticks}`. `notes` per
-channel are `[duration, frequency]` pairs; `loopFrom` is the tick where the
-loop starts; `ticks` the total length in 1/16th ticks.
+**Notes**: `sequence:setTempo` is in **steps per second** (not BPM);
+`addTrack()` with no argument creates and returns a new track; `addNote(step,
+note, length, velocity)` accepts a MIDI number or a note name like "Db3".
 
-**Where**: `pd/sound.py` (`Synth`, `playNote`), `pd/runtime.py` (`_sound_table`).
-
-**What to do**: implement a sequencer that reads the song structure, schedules
-notes at absolute engine time (`getCurrentTime()`), respects `loopFrom`/`ticks`,
-and uses the default waveform (noise/sawtooth) with ADSR.
-
-**Verify**: run `Kickflip Coast Demo.pdx`, confirm the music plays and loops.
-Check `Synth.playNote` receives `(freq, vol, length, when)` with `when` absolute.
+**Verify**: run `Kickflip Coast Demo.pdx` and confirm the music plays and loops.
 
 ---
 
