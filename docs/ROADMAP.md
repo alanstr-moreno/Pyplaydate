@@ -42,21 +42,17 @@ the score increments.
 
 ---
 
-## 3. Asheteroids `t:rotate()` — `[open]`
+## 3. Asheteroids `t:rotate()` — `[resolved]`
 
-**Problem**: `mijuego2.pdx` (Asheteroids) reaches `vectorsprite.lua:32` and
-fails on `t:rotate()`. Installing the geometry metatable with
-`debug.setmetatable` replaces the lupa metatable and loses the object's methods.
+**Status**: fixed. The geometry metatable install (`pd/runtime.py`,
+`LUA_GEOM_MT`) was REPLACING lupa's metatable with one that only had `__mul`,
+which removed `__index` and made any `t:rotate()` / `t.x` fail with
+"attempt to index a userdata value". It now PRESERVES lupa's metatable and only
+ADDS `__mul`, so both the operator and the Python methods work while
+`type(t) == "userdata"` is kept.
 
-**Where**: `pd/runtime.py` (`_install_geometry_metamethods`, `LUA_GEOM_MT`),
-`pd/geometry.py` (`AffineTransform.rotate`).
-
-**What to do**: preserve the existing lupa metatable when installing the
-geometry metamethods (the lesson already applied to the SCM case but not closed
-for Asheteroids).
-
-**Verify**: run `mijuego2.pdx`, confirm it gets past `vectorsprite.lua:32` and
-the ship rotates.
+**Verify (regression)**: run `mijuego2.pdx`, confirm it boots, the ship
+rotates, and there is no `vectorsprite.lua:32` error.
 
 ---
 

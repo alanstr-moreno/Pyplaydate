@@ -63,7 +63,29 @@ def _groups_to_mask(groups):
     _add(groups)
     return mask
 
-LUA_GEOM_MT = "__pd_poly_mt = { __mul = function(a, b) return __pd_poly_mul(a, b) end }\nlocal function __pd_wrap(tbl)\n  local f = tbl['new']\n  if f == nil then return end\n  tbl['new'] = function(...)\n    local o = f(...)\n    if o ~= nil then debug.setmetatable(o, __pd_poly_mt) end\n    return o\n  end\nend\n__pd_wrap(playdate.geometry.polygon)\n__pd_wrap(playdate.geometry.affineTransform)\n"
+LUA_GEOM_MT = """\
+local function __pd_wrap(tbl)
+  local f = tbl['new']
+  if f == nil then return end
+  tbl['new'] = function(...)
+    local o = f(...)
+    if o ~= nil then
+      -- PRESERVE lupa's metatable: it carries __index, which exposes the
+      -- Python methods/fields (rotate, scale, translate, getBounds...). We only
+      -- ADD __mul. Replacing the metatable (as before) left the object with no
+      -- __index, so `t:rotate()` failed with
+      -- "attempt to index a userdata value (local 't')".
+      local mt = debug.getmetatable(o)
+      if mt == nil then mt = {} end
+      mt.__mul = function(a, b) return __pd_poly_mul(a, b) end
+      debug.setmetatable(o, mt)
+    end
+    return o
+  end
+end
+__pd_wrap(playdate.geometry.polygon)
+__pd_wrap(playdate.geometry.affineTransform)
+"""
 
 
 __all__ = ["Runtime", "Playdate", "Display", "HAS_PLAYDATE_LUA", "LUA_KIND"]
