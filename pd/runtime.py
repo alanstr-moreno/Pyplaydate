@@ -531,6 +531,10 @@ class Runtime:
             "sound": self._sound_table(),
             "file": self._file_table(),
             "datastore": self._datastore_table(),
+            # playdate.ui is filled in by CoreLibs/ui/* (gridview, crankIndicator).
+            # Exposing it as an empty table avoids the "playdate.ui or {}" read
+            # path and lets those CoreLibs register their classes.
+            "ui": T({}),
         })
         self.api = api
         return api
@@ -957,8 +961,41 @@ class Runtime:
                         break
             return self._make_font()          # stub if there is no .pft
 
+        def _font_get_text_width(font=None, text=None, *a):
+            """playdate.graphics.font.getTextWidth(font, text) — module-level.
+
+            CoreLibs/graphics.lua captures this as `originalGetTextWidth` and
+            calls it as `originalGetTextWidth(self, str)` (self = a font handle).
+            Without it the capture is nil and any font:getTextWidth() dies.
+            """
+            if text is None:
+                return 0
+            t = str(text)
+            obj = self._deref(font) if font is not None else None
+            if obj is not None and hasattr(obj, "getTextWidth"):
+                try:
+                    return obj.getTextWidth(t)
+                except Exception:  # noqa: BLE001
+                    pass
+            return self.playdate.graphics.getTextWidth(t)
+
+        def _font_get_text_size(font=None, text=None, *a):
+            if text is None:
+                return (0, 0)
+            t = str(text)
+            obj = self._deref(font) if font is not None else None
+            if obj is not None and hasattr(obj, "getTextSize"):
+                try:
+                    return obj.getTextSize(t)
+                except Exception:  # noqa: BLE001
+                    pass
+            return self.playdate.graphics.getTextSize(t)
+
         return self.lua.table_from({
             "new": _new,
+            # Module-level methods CoreLibs wraps (see CoreLibs/graphics.lua).
+            "getTextWidth": _font_get_text_width,
+            "getTextSize": _font_get_text_size,
             "kVariantNormal": 0, "kVariantBold": 1, "kVariantItalic": 2,
         })
 
