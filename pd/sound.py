@@ -199,7 +199,16 @@ class Synth(Permissive):
     """
 
     def __init__(self, *args):
+        # synth.new([waveform]): the game passes the waveform constant
+        # (kWaveSquare=0, Triangle=1, Sine=2, Noise=3, Sawtooth=4). IGNORING it
+        # (as before) made every synth use the default sawtooth, so the noise
+        # percussions (kWaveNoise) never sounded like noise.
         self._waveform = 4          # default = SAWTOOTH (bright instrumental music of the original)
+        if args and args[0] is not None:
+            try:
+                self._waveform = int(args[0])
+            except (TypeError, ValueError):
+                pass
         self._volume = 1.0
         self._freq = 440.0
         self._playing = False
