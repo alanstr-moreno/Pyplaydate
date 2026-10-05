@@ -207,21 +207,23 @@ class Synth(Permissive):
         self._adsr = (0.0, 0.0, 1.0, 0.0)   # attack, decay, sustain, release
 
     def _osc(self, t, freq):
-        # REAL SDK constants (C: kWaveformSquare=0, Triangle=1, Sine=2,
-        # Noise=3, Sawtooth=4). The game uses synth.new() without a waveform ->
-        # the default must sound like the original's "instrumental music".
+        # Waveform numbering matches the SDK enum SoundWaveform (C:
+        # kWaveformSquare=0, Triangle=1, Sine=2, Noise=3, Sawtooth=4). The
+        # constants exposed to Lua (playdate.sound.kWave*) use the same numbers,
+        # so a game that passes kWaveTriangle gets a triangle here.
         import math
         ph = 2 * math.pi * freq * t
-        if self._waveform == 4:      # sawtooth (bright, many harmonics)
+        w = self._waveform
+        if w == 4:      # sawtooth (bright, many harmonics)
             return 2.0 * ((freq * t) % 1.0) - 1.0
-        if self._waveform == 3:      # noise
+        if w == 3:      # noise
             import random
             return random.uniform(-1.0, 1.0)
-        if self._waveform == 1:      # square
-            return 1.0 if math.sin(ph) >= 0 else -1.0
-        if self._waveform == 2:      # triangle
+        if w == 1:      # triangle
             return 2 / math.pi * math.asin(math.sin(ph))
-        return math.sin(ph)          # sine
+        if w == 2:      # sine
+            return math.sin(ph)
+        return 1.0 if math.sin(ph) >= 0 else -1.0   # square (0)
 
     def _make_tone(self, freq, dur):
         if not _ensure_mixer():

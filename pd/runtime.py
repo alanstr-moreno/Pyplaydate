@@ -1278,6 +1278,15 @@ class Runtime:
             "synth": T({"new": Synth}),
             "instrument": T({"new": Instrument}),
             "channel": T({"new": Channel}),
+            # Synth waveform constants (SDK: pd_api_sound.h, enum SoundWaveform:
+            # Square=0, Triangle=1, Sine=2, Noise=3, Sawtooth=4). Games pass
+            # these to synth.new()/synth:setWaveform(); Synth._osc interprets the
+            # same numbering.
+            "kWaveSquare": 0,
+            "kWaveTriangle": 1,
+            "kWaveSine": 2,
+            "kWaveNoise": 3,
+            "kWaveSawtooth": 4,
             "effect": T({"new": lambda *a: None}),
             "source": T({"new": lambda *a: None}),
             "sequence": T({"new": self._audio_stub}),
