@@ -51,6 +51,24 @@ class Graphics:
         # kColorBlack/kColorWhite values of the SDK.
         return WHITE if self._color else BLACK
 
+    def _mode_ink(self):
+        """Effective ink for text/images under the current image draw mode.
+
+        kDrawModeFillWhite (3) draws opaque pixels white, kDrawModeFillBlack (4)
+        black and kDrawModeInverted (7) the opposite of the current color. A
+        source game draws a black rect then `setImageDrawMode(kDrawModeFillWhite)`
+        + drawText to get white text on it; ignoring the mode left the text
+        invisible (black on black).
+        """
+        mode = getattr(self, "_image_draw_mode", 0)
+        if mode == 3:      # kDrawModeFillWhite
+            return WHITE
+        if mode == 4:      # kDrawModeFillBlack
+            return BLACK
+        if mode == 7:      # kDrawModeInverted
+            return WHITE if self._color else BLACK
+        return self._ink()
+
     def _xy(self, x, y):
         return (int(x) + self._ox + self._tx + self._dox, int(y) + self._oy + self._ty + self._doy)
 
@@ -348,7 +366,7 @@ class Graphics:
         font = self._pft_font()
         if font is None:
             return False
-        ink = self._ink()
+        ink = self._mode_ink()
         cx, cy = self._xy(x, y)
         track = 0
         try:
@@ -375,7 +393,7 @@ class Graphics:
     def drawText(self, text, x, y, *a):
         if self._draw_pft(text, x, y):
             return
-        surf = self._get_font().render(str(text), True, self._ink())
+        surf = self._get_font().render(str(text), True, self._mode_ink())
         self._canvas.blit(surf, self._xy(x, y))
 
     def drawTextAligned(self, text, x, y, align=0, *a):

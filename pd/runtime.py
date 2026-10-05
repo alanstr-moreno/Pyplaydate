@@ -512,6 +512,15 @@ class Runtime:
                 "updateTimers": lambda *a: None,
                 "allTimers": lambda *a: self.lua.table_from([]),
             }),
+            # playdate.timer: stub here; the real CoreLibs/timer (loaded by
+            # _ensure_firmware_corelibs) replaces it with the working version
+            # that defines updateTimers et al.
+            "timer": self.lua.table_from({
+                "new": lambda *a: None,
+                "performAfterDelay": lambda *a: None,
+                "updateTimers": lambda *a: None,
+                "allTimers": lambda *a: self.lua.table_from([]),
+            }),
             "getElapsedTime": pd.getElapsedTime,
             "getFrame": pd.getFrame,
             "getGameName": pd.getGameName,
@@ -1536,7 +1545,9 @@ class Runtime:
 
         self.asset_dir = game_dir
         self.fs = FileSystem(game_dir)
-        self._setup_globals(with_import=False)
+        # Source games use `import "CoreLibs/graphics"` etc., so `import` must be
+        # defined (routed to the SDK CoreLibs / the game's own .lua modules).
+        self._setup_globals(with_import=True)
         if self.on_ready:
             self.on_ready(self)
         self.emu.game_dir = game_dir
@@ -1544,7 +1555,10 @@ class Runtime:
             f'package.path = {repr(os.path.join(game_dir, "?.lua"))} .. ";" .. package.path'
         )
         with open(os.path.join(game_dir, "main.lua"), "r", encoding="utf-8") as f:
-            self.lua.execute(f.read())
+            self.lua.execute(_expand_compound_assign(f.read()))
+        # Load the firmware CoreLibs the game did not import (timer, frameTimer,
+        # easing) and cache their updaters, exactly like the .pdx path.
+        self._ensure_firmware_corelibs()
         self._resolve_timers()
 
     # --- compiled mode (.pdx / .pdz) ----------------------------------
@@ -1635,9 +1649,20 @@ class Runtime:
             if n in loaded:
                 return
             loaded.add(n)
-            if n in self.chunks:
+            # 1) a compiled chunk shipped in the .pdz (source mode: chunks is None)
+            if self.chunks and n in self.chunks:
                 self._run_chunk(n)
                 return
+            # 2) a .lua module inside the (source) game folder
+            if self.asset_dir:
+                p = os.path.join(self.asset_dir, n + ".lua")
+                if os.path.isfile(p):
+                    try:
+                        with open(p, encoding="utf-8") as fh:
+                            self.lua.execute(_expand_compound_assign(fh.read()))
+                        return
+                    except OSError:
+                        pass
             # CORELIBS LIVE IN THE CONSOLE FIRMWARE, not in the .pdx: a game
             # does `import "CoreLibs/nineslice"` and on the console it works
             # even if the bundle does not ship that file (Smolitaire only ships
