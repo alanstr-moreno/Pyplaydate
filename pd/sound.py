@@ -47,12 +47,21 @@ def _ensure_scheduler():
             with _SCHED_LOCK:
                 while _SCHED and _SCHED[0][0] <= now:
                     due.append(_heapq.heappop(_SCHED))
+                nxt = _SCHED[0][0] if _SCHED else None
             for _when, _s, synth, freq, dur, vol in due:
                 try:
                     synth._play_now(freq, dur, vol)
                 except Exception:  # noqa: BLE001
                     pass
-            _time.sleep(0.006)
+            # Adaptive sleep: wake up right before the next note, capped so that
+            # new notes or stop() are picked up quickly. Keeps the CPU near idle
+            # on low-resource hardware (Raspberry Pi Zero 2 W).
+            if due:
+                _time.sleep(0.002)
+            elif nxt is None:
+                _time.sleep(0.02)
+            else:
+                _time.sleep(min(0.02, max(0.002, nxt - get_current_time())))
     _SCHED_WORKER = _threading.Thread(target=_run, daemon=True)
     _SCHED_WORKER.start()
 

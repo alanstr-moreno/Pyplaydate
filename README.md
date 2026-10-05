@@ -148,6 +148,40 @@ python playdate_pi.py games/shrimpboom004.pdx --verbose     # log API/assets
 | Q / E | Crank (counter-clockwise / clockwise) |
 | ESC | Quit |
 
+## Raspberry Pi Zero 2 W
+
+The emulator is written to run on the Pi with no code changes. One-time setup:
+
+```bash
+# 1. System packages (compiler + Python headers + curl)
+sudo apt update
+sudo apt install -y build-essential python3-dev python3-venv python3-pip curl
+
+# 2. Python packages
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Build the 32-bit Lua bridge (same script as on the Mac)
+sh tools/build_lua32.sh
+
+# 4. Run a game (use --scale 1 or 2 on the Pi)
+python playdate_pi.py "games/peru.pdx" --scale 1
+```
+
+Notes for the Pi:
+
+- **Use `--scale 1` or `2`.** Scaling the 400×240 framebuffer to a big window is
+  the main CPU cost; on the Zero 2 W keep it small. The emulator already renders
+  the frame once and scales with nearest-neighbor.
+- **Framebuffer / DRM (no desktop):** set `SDL_VIDEODRIVER=kmsdrm` before running.
+- **No audio device:** set `SDL_AUDIODRIVER=dummy`. The game still runs; sound
+  calls become no-ops (the mixer init already falls back gracefully).
+- **Sound**: the note scheduler uses a single background thread with an adaptive
+  sleep, so it stays near idle when there is no music. Hundreds of scheduled
+  notes do not spawn hundreds of threads (important on the Pi).
+- **Performance**: the Lua interpreter and the 1-bit quantization are the other
+  costs. 400×240 at 30 FPS is comfortable on the Zero 2 W.
+
 ## How it works (architecture map)
 
 Four layers turn the compiled `.pdx` into pixels and audio. Each has its own
