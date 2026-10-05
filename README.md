@@ -338,4 +338,4 @@ and [pygame-ce](https://pyga.me/).
 ---
 
 **LIMA - PERU**
-**PHC**
+**PhC**
