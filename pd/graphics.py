@@ -651,12 +651,52 @@ class Graphics:
         if x1 <= x0 or y1 <= y0:
             return
 
-        # Render the sampled image to a temp surface, then blit it once.
-        out = pygame.Surface((x1 - x0, y1 - y0), pygame.SRCALPHA)
+        Wd = x1 - x0
+        Hd = y1 - y0
+
+        # --- Fast path ---------------------------------------------------
+        # With no shear (dxy == 0) and tiling, the source row `v` is constant
+        # across a destination row and `u` is linear in X: each destination row
+        # is just a horizontally scaled copy of one texture row. Doing that with
+        # pygame's C-level scale/blit instead of a per-pixel Python loop is what
+        # lets the emulator reach the console's 50 Hz (the Python loop capped
+        # Mode7 games around 37 fps, so their sprites moved visibly slower).
+        if tile and dxy == 0.0:
+            max_a = 0.0
+            for Y in range(y0, y1):
+                ny = (Y - cy) / height if height else 0.0
+                denom = z - (ny * height) * tan_tilt
+                s = 1.0 if abs(denom) < 1e-9 else z / denom
+                if abs(dxx * s) > max_a:
+                    max_a = abs(dxx * s)
+            ws_max = int(round(max_a * Wd)) + 2
+            tw = ((ws_max + sw) // sw + 1) * sw
+            tiled = pygame.Surface((tw, sh), pygame.SRCALPHA)
+            for i in range(0, tw, sw):
+                tiled.blit(surf, (i, 0))
+            for Y in range(y0, y1):
+                ny = (Y - cy) / height if height else 0.0
+                denom = z - (ny * height) * tan_tilt
+                s = 1.0 if abs(denom) < 1e-9 else z / denom
+                a_u = dxx * s
+                b_u = dx + s * (dyx * Y - dxx * cx - dyx * cy)
+                b_v = dy + s * (dyy * Y - dxy * cx - dyy * cy)
+                ws = int(round(abs(a_u) * Wd))
+                ws = max(1, min(ws, tw - sw))
+                offset = int(math.floor(b_u)) % sw
+                strip = tiled.subsurface((offset, int(b_v) % sh, ws, 1))
+                row = pygame.transform.scale(strip, (Wd, 1))
+                if a_u < 0:
+                    row = pygame.transform.flip(row, True, False)
+                canvas.blit(row, (x0, Y))
+            return
+
+        # --- General path (shear or untiled): per-pixel sampling ----------
+        out = pygame.Surface((Wd, Hd), pygame.SRCALPHA)
         src = pygame.PixelArray(surf)
         dst = pygame.PixelArray(out)
         try:
-            for py in range(out.get_height()):
+            for py in range(Hd):
                 Y = y0 + py
                 ny = (Y - cy) / height if height else 0.0
                 denom = z - (ny * height) * tan_tilt
@@ -664,20 +704,17 @@ class Graphics:
                 a_u, a_v = dxx * s, dxy * s
                 b_u = dx + s * (dyx * Y - dxx * cx - dyx * cy)
                 b_v = dy + s * (dyy * Y - dxy * cx - dyy * cy)
-                for px in range(out.get_width()):
+                for px in range(Wd):
                     X = x0 + px
                     u, v = a_u * X + b_u, a_v * X + b_v
                     if tile:
                         u, v = u % sw, v % sh
                     elif u < 0 or u >= sw or v < 0 or v >= sh:
                         continue
-                    try:
-                        dst[px, py] = src[int(u), int(v)]
-                    except Exception:  # noqa: BLE001
-                        pass
+                    dst[px, py] = src[int(math.floor(u)), int(math.floor(v))]
         finally:
             del dst, src
-        self._canvas.blit(out, (x0, y0))
+        canvas.blit(out, (x0, y0))
 
     def getGraphics(self):
         return self

@@ -37,7 +37,7 @@ CONTROLS = """\
 
 
 class Emulator:
-    def __init__(self, game, scale=2, fps=30, headless=False, palette="device",
+    def __init__(self, game, scale=2, fps=50, headless=False, palette="device",
                  verbose=False):
         self.game_name = game
         self.scale = scale
