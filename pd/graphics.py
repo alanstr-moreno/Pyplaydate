@@ -8,6 +8,8 @@ Images (.pdi/.pdt) are drawn here; the object holding the Surface lives in
 pd/image.py and the Lua "handle" is built by runtime.py (`__id` pattern).
 """
 
+import math
+
 import pygame
 
 BLACK = (0, 0, 0)
@@ -609,6 +611,73 @@ class Graphics:
         if yscale is not None:
             s = pygame.transform.scale(s, (s.get_width(), int(s.get_height() * yscale)))
         self._canvas.blit(s, self._xy(x, y))
+
+    def image_draw_sampled(self, handle, x, y, width, height, centerx, centery,
+                           dxx, dyx, dxy, dyy, dx, dy, z, tiltAngle, tile):
+        """image:drawSampled(...) - Mode7 perspective texture mapping.
+
+        Draws the image as if mapped onto a tilted plane. The target rectangle
+        (x, y, width, height) is the screen area to fill; (centerx, centery) is
+        the transform center in normalized coordinates; the affine (dxx, dyx,
+        dxy, dyy, dx, dy) maps plane coordinates to image coordinates; z and
+        tiltAngle give the perspective; tile wraps the image on the plane.
+        """
+        obj = self.deref(handle) if self.deref is not None and handle is not None else None
+        surf = getattr(obj, "surface", None) if obj is not None else None
+        if surf is None:
+            return
+        try:
+            x, y, width, height = float(x), float(y), float(width), float(height)
+            centerx, centery = float(centerx), float(centery)
+            dxx, dyx, dxy, dyy, dx, dy = (float(dxx), float(dyx), float(dxy),
+                                          float(dyy), float(dx), float(dy))
+            z, tiltAngle = float(z), float(tiltAngle)
+            tile = bool(tile)
+        except Exception:  # noqa: BLE001
+            return
+
+        cx = x + centerx * width
+        cy = y + centery * height
+        tan_tilt = math.tan(math.radians(tiltAngle))
+        sw, sh = surf.get_size()
+        if sw <= 0 or sh <= 0:
+            return
+
+        canvas = self._canvas
+        x0, y0 = int(x), int(y)
+        x1, y1 = int(x + width), int(y + height)
+        x0, y0 = max(0, x0), max(0, y0)
+        x1, y1 = min(canvas.get_width(), x1), min(canvas.get_height(), y1)
+        if x1 <= x0 or y1 <= y0:
+            return
+
+        # Render the sampled image to a temp surface, then blit it once.
+        out = pygame.Surface((x1 - x0, y1 - y0), pygame.SRCALPHA)
+        src = pygame.PixelArray(surf)
+        dst = pygame.PixelArray(out)
+        try:
+            for py in range(out.get_height()):
+                Y = y0 + py
+                ny = (Y - cy) / height if height else 0.0
+                denom = z - (ny * height) * tan_tilt
+                s = 1.0 if abs(denom) < 1e-9 else z / denom
+                a_u, a_v = dxx * s, dxy * s
+                b_u = dx + s * (dyx * Y - dxx * cx - dyx * cy)
+                b_v = dy + s * (dyy * Y - dxy * cx - dyy * cy)
+                for px in range(out.get_width()):
+                    X = x0 + px
+                    u, v = a_u * X + b_u, a_v * X + b_v
+                    if tile:
+                        u, v = u % sw, v % sh
+                    elif u < 0 or u >= sw or v < 0 or v >= sh:
+                        continue
+                    try:
+                        dst[px, py] = src[int(u), int(v)]
+                    except Exception:  # noqa: BLE001
+                        pass
+        finally:
+            del dst, src
+        self._canvas.blit(out, (x0, y0))
 
     def getGraphics(self):
         return self

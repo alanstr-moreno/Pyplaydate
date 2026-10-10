@@ -768,6 +768,10 @@ class Runtime:
             "drawScaledText": lambda _h, *a: None,
             "drawScaled": lambda _h, x, y, s, ys=None: g.image_draw_scaled(_h, x, y, s, ys),
             "drawRotated": lambda _h, x, y, an, sc=1, ys=None: g.image_draw_rotated(_h, x, y, an, sc, ys),
+            "drawSampled": lambda _h, x, y, w, h, cx, cy, dxx, dyx, dxy, dyy,
+                           dx, dy, z, tilt, tile: g.image_draw_sampled(
+                               _h, x, y, w, h, cx, cy, dxx, dyx, dxy, dyy,
+                               dx, dy, z, tilt, tile),
             "copy": lambda _h=None, *a: self._image_handle(PDImage(img.surface.copy())),
         })
 
