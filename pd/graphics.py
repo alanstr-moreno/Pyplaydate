@@ -35,6 +35,12 @@ _NO_LOCK = object()
 # -- which is why the track looked tiny next to the truck.
 FOCAL_RATIO = 4.0
 
+# How strongly the tilt term bends the depth denominator with the row. 1.0 is the
+# plain sin(tiltAngle) of the geometry (horizon just above the rect); the plane
+# then stays far too magnified in the distance -- the Simulator's own probe dump
+# puts the far rows' detail 2.5-3x finer than that. Fitted empirically below.
+TILT_GAIN = 1.0
+
 # Scale applied to the vertical (plane-depth) geometry coordinate. The SDK does
 # not document how the tilted plane maps to geometry coordinates, so this is a
 # fitting knob: the field only reveals the horizontal spread (its dither hides
@@ -708,7 +714,7 @@ class Graphics:
             """(a_u, b_u, a_v, b_v) for `u = a_u*X + b_u`, `v = a_v*X + b_v`,
             or None for a row at/above the horizon, where the plane is not."""
             gy = cy - Y
-            denom = FOCAL_RATIO * z * cos_t - gy * sin_t
+            denom = FOCAL_RATIO * z * cos_t - TILT_GAIN * gy * sin_t
             if denom <= 1e-9:
                 return None
             k = cos_t / denom
