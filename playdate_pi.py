@@ -4,7 +4,7 @@
 Usage:
     python playdate_pi.py hello            # runs games/hello
     python playdate_pi.py hello --scale 3  # 3x window
-    python playdate_pi.py hello --fps 50        # 50 Hz, igual que Playdate
+    python playdate_pi.py hello --frames 60 # headless, 60 frames (for tests)
 
 On the Raspberry Pi Zero 2 W the same command works (pygame already runs there).
 """
@@ -23,7 +23,12 @@ def main(argv=None):
                     choices=["device", "bw", "yellow"],
                     help="screen colors: device (Memory LCD), bw (pure black/white, "
                          "as Panic asks for Catalog captures) or yellow")
-    ap.add_argument("--fps", type=int, default=50, help="Playdate frames per second (default: 50, igual que el simulador oficial)")
+    ap.add_argument("--fps", type=int, default=None,
+                    help="override the frame rate. By default the emulator "
+                         "follows the game: 30 fps as on the console, or whatever "
+                         "it asks for via playdate.display.setRefreshRate() "
+                         "(50 max). The official simulator renders at up to 50, "
+                         "which is why games can look faster there.")
     ap.add_argument("--frames", type=int, default=None,
                     help="exit after N frames (headless, for tests)")
     ap.add_argument("--verbose", action="store_true",

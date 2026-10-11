@@ -29,28 +29,42 @@ CRANK_KEYS = {pygame.K_q: -1, pygame.K_e: 1}
 
 
 class _FrameLimiter:
-    """Precise frame limiter (fixed deadline, not SDL_Delay).
+    """Precise frame limiter driven by the game's refresh rate.
 
-    pygame's `Clock.tick()` sleeps through SDL_Delay, which on macOS overshoots
-    by ~4 ms per frame: asking for 50 Hz actually produced ~42 Hz. Games whose
-    speed depends on how many times per second `playdate.update()` runs (any
-    frame-counted animation, e.g. Mode7 backgrounds) therefore ran ~16% slower
-    than the official simulator. Scheduling against an absolute deadline keeps
-    the long-run rate exact even when an individual sleep overshoots; the last
-    `spin` seconds are busy-waited to avoid the sleep granularity.
+    The Playdate calls `playdate.update()` 30 times per second by default and
+    lets the game change that with `playdate.display.setRefreshRate()` (50 is
+    the maximum). The limiter follows whatever the game asked for, so the
+    emulator speaks the same clock as the console.
+
+    It schedules against an absolute deadline rather than pygame's
+    `Clock.tick()`: that sleeps through SDL_Delay, which on macOS overshoots by
+    ~4 ms per frame, so asking for 30 Hz actually produced ~27 Hz and a game
+    animating by frame count drifted slower than the console. The deadline
+    keeps the long-run rate exact even when an individual sleep overshoots.
     """
 
-    def __init__(self, fps, spin=0.0015):
-        self.period = (1.0 / float(fps)) if fps else 0.0
+    def __init__(self, fps=None, spin=0.0015):
         self.spin = spin
+        self._period = 0.0
         self._deadline = time.perf_counter()
+        if fps:
+            self.set_rate(fps)
 
-    def tick(self):
-        if self.period <= 0:
+    def set_rate(self, fps):
+        """fps <= 0 (or None) means 'as fast as possible', like rate 0."""
+        period = (1.0 / float(fps)) if fps and fps > 0 else 0.0
+        if period != self._period:
+            self._period = period
+            self._deadline = time.perf_counter()
+
+    def tick(self, fps=None):
+        if fps is not None:
+            self.set_rate(fps)
+        if self._period <= 0:
             return
-        self._deadline += self.period
+        self._deadline += self._period
         now = time.perf_counter()
-        if now - self._deadline > self.period:
+        if now - self._deadline > self._period:
             self._deadline = now          # fell behind: resync, never spin
             return
         while True:
@@ -71,7 +85,7 @@ CONTROLS = """\
 
 
 class Emulator:
-    def __init__(self, game, scale=2, fps=50, headless=False, palette="device",
+    def __init__(self, game, scale=2, fps=None, headless=False, palette="device",
                  verbose=False):
         self.game_name = game
         self.scale = scale
@@ -148,7 +162,11 @@ class Emulator:
 
             self.frame += 1
             runtime.playdate.button.end_frame()
-            clock.tick()
+            # The console clock: 30 Hz by default, whatever the game asked for
+            # via playdate.display.setRefreshRate() (50 max). --fps overrides.
+            rate = (self.fps if self.fps is not None
+                    else runtime.playdate.display.getRefreshRate())
+            clock.tick(rate)
             if max_frames and self.frame >= max_frames:
                 self.running = False
 

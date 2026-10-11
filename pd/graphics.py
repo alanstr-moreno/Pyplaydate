@@ -692,8 +692,10 @@ class Graphics:
             return
 
         # --- General path (shear or untiled): per-pixel sampling ----------
+        # The source is copied to a list of rows first: subscripting a plain
+        # list is measurably faster than a double PixelArray lookup per pixel.
+        rows = [[surf.get_at((sx, sy)) for sx in range(sw)] for sy in range(sh)]
         out = pygame.Surface((Wd, Hd), pygame.SRCALPHA)
-        src = pygame.PixelArray(surf)
         dst = pygame.PixelArray(out)
         try:
             for py in range(Hd):
@@ -711,9 +713,9 @@ class Graphics:
                         u, v = u % sw, v % sh
                     elif u < 0 or u >= sw or v < 0 or v >= sh:
                         continue
-                    dst[px, py] = src[int(math.floor(u)), int(math.floor(v))]
+                    dst[px, py] = rows[int(math.floor(v))][int(math.floor(u))]
         finally:
-            del dst, src
+            del dst
         canvas.blit(out, (x0, y0))
 
     def getGraphics(self):
