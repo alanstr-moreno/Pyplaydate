@@ -20,12 +20,13 @@ _NO_LOCK = object()
 
 # Focal length of the sampling camera, as a multiple of the plane distance z
 # (f = FOCAL_RATIO * z, so z still drives how exaggerated the perspective gets).
-# The SDK does not publish the constant, so it is fitted to the SDK's own art:
-# in Mode7Driver the road is 19 px wide in track.png and the truck sprite is
-# 18 px, i.e. they were drawn to line up 1:1 on screen. With FOCAL_RATIO = 1 the
-# ground came out 2.4x too compressed (a 8 px road under an 18 px truck); 2.4
-# puts the ground back at 1:1 with the sprites.
-FOCAL_RATIO = 2.4
+# 1.0 is the plain geometry: f = z. It was CHECKED against a frame captured from
+# the official Simulator (modo7/alan7.pdx): the field's tiling density matches
+# at 1.0 and a larger focal visibly stretches the plane -- 2.4 was tried after
+# noticing the road came out thin, but it made the field look stretched while
+# the tiling no longer matched the reference, so it was reverted. Raise this only
+# to zoom the plane in deliberately.
+FOCAL_RATIO = 1.0
 
 
 class Graphics:
