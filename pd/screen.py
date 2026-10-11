@@ -42,13 +42,40 @@ class Screen:
     """Drawing canvas (RGB) + 1-bit presentation with the console palette."""
 
     def __init__(self, palette="device", bezel=BEZEL):
-        self.width = WIDTH
-        self.height = HEIGHT
         self.bezel = bezel
         self.inverted = False
         self.palette_name = palette if palette in PALETTES else "device"
-        self.canvas = pygame.Surface((WIDTH, HEIGHT))
+        self.pixel_scale = 1
+        self._alloc_canvas()
+
+    def _alloc_canvas(self):
+        """Allocates the framebuffer the game draws into.
+
+        `playdate.display.setScale(n)` does NOT shrink the panel: it changes the
+        buffer the game draws into to 400/n x 240/n, each buffer pixel being
+        presented as n x n. The SDK spells it out for getWidth(): "if the scale
+        is 2, the values returned will be based off of a 200 x 120-pixel screen
+        rather than the native 400 x 240".
+
+        Getting this wrong drawns everything into the top-left quadrant and the
+        Mode7 plane comes out in the wrong place and size -- which is exactly
+        what a game calling setScale(2) did.
+        """
+        s = max(1, int(self.pixel_scale) or 1)
+        self.width = WIDTH // s
+        self.height = HEIGHT // s
+        self.canvas = pygame.Surface((self.width, self.height))
         self.canvas.fill((255, 255, 255))
+
+    def setScale(self, n):
+        """playdate.display.setScale(n): only 1, 2, 4 and 8 are accepted."""
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            return
+        if n in (1, 2, 4, 8) and n != self.pixel_scale:
+            self.pixel_scale = n
+            self._alloc_canvas()
 
     # --- state ---------------------------------------------------------
     @property
@@ -86,15 +113,10 @@ class Screen:
     def render(self, display, scale=2):
         """Draws the case frame + the scaled screen (nearest)."""
         src = self.to_1bit()
-        # playdate.display.setScale(n): the console draws at 400/n x 240/n and
-        # then each pixel occupies n x n -> "chunky" look. Reproduced by scaling
-        # down and up with nearest, which is exactly that.
-        s = max(1, int(getattr(self, "pixel_scale", 1) or 1))
-        if s > 1:
-            small = (WIDTH // s, HEIGHT // s)
-            src = pygame.transform.scale(
-                pygame.transform.scale(src, small), (WIDTH, HEIGHT))
-        frame = pygame.transform.scale(src, (self.width * scale, self.height * scale))
+        # The game drew into a 400/s x 240/s buffer; presenting it is stretching
+        # that back to the native panel and then to the window. Integer factors
+        # with nearest-neighbour is what gives the console's chunky look.
+        frame = pygame.transform.scale(src, (WIDTH * scale, HEIGHT * scale))
         if display is None:
             return frame
 

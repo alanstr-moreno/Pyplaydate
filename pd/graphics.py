@@ -22,8 +22,6 @@ _NO_LOCK = object()
 class Graphics:
     def __init__(self, screen):
         self.screen = screen
-        self.width = screen.width
-        self.height = screen.height
         self.asset_dir = None
         self.deref = None                  # set by Runtime (handle -> Python object)
         self._font_size = 16
@@ -44,6 +42,17 @@ class Graphics:
         self.font_factory = None           # set by Runtime (for the default getFont)
 
     # --- internals -------------------------------------------------------
+    # Read live from the screen: `playdate.display.setScale(n)` changes the
+    # buffer the game draws into (400/n x 240/n) while the panel stays 400x240,
+    # so a cached size would keep clipping and centering to the wrong bounds.
+    @property
+    def width(self):
+        return self.screen.width
+
+    @property
+    def height(self):
+        return self.screen.height
+
     @property
     def _canvas(self):
         return self._lock if self._lock is not None else self.screen.canvas

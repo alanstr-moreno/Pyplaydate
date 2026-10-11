@@ -224,7 +224,8 @@ class Emulator:
         scr = self.screen
         scr.canvas.fill((255, 255, 255))
         try:
-            font = pygame.font.Font(None, 34)
+            # Relative to the buffer, which shrinks with display.setScale(n).
+            font = pygame.font.Font(None, max(12, scr.height // 7))
             text = font.render("juego incompleto", True, (0, 0, 0))
             scr.canvas.blit(text, text.get_rect(
                 center=(scr.width // 2, scr.height // 2)))

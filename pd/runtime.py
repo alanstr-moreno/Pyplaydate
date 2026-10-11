@@ -133,13 +133,13 @@ class Display:
         return getattr(self._screen, "pixel_scale", 1)
 
     def setScale(self, s):
-        """playdate.display.setScale(n): only 1, 2, 4 and 8 are accepted."""
-        try:
-            n = int(s)
-        except Exception:  # noqa: BLE001
-            return
-        if n in (1, 2, 4, 8):
-            self._screen.pixel_scale = n
+        """playdate.display.setScale(n): only 1, 2, 4 and 8 are accepted.
+
+        The screen reallocates its framebuffer to 400/n x 240/n, which is the
+        coordinate space the game then draws in (SDK: getWidth() "takes the
+        current display scale into account").
+        """
+        self._screen.setScale(s)
 
     def getScreenWidth(self):
         return self._screen.width
