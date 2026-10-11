@@ -625,11 +625,25 @@ class Graphics:
                            dxx, dyx, dxy, dyy, dx, dy, z, tiltAngle, tile):
         """image:drawSampled(...) - Mode7 perspective texture mapping.
 
-        Draws the image as if mapped onto a tilted plane. The target rectangle
-        (x, y, width, height) is the screen area to fill; (centerx, centery) is
-        the transform center in normalized coordinates; the affine (dxx, dyx,
-        dxy, dyy, dx, dy) maps plane coordinates to image coordinates; z and
-        tiltAngle give the perspective; tile wraps the image on the plane.
+        Draws the image as if mapped onto a plane tilted `tiltAngle` degrees
+        about the x axis whose centre lies `z` away from the viewer, so the
+        horizon falls at cy - z*cot(tiltAngle); everything at or above it is
+        left untouched. For a target pixel the plane coordinates, normalised by
+        z, are
+
+            denom = z*cos(t) - (cy - Y)*sin(t)
+            Gx    = (X - cx) * cos(t) / denom
+            Gy    = (cy - Y) / denom
+
+        and the affine turns those into image coordinates:
+        u = dxx*Gx + dyx*Gy + dx, v = dxy*Gx + dyy*Gy + dy. u and v are in IMAGE
+        units -- 0..1 spans the whole image -- which is exactly why games pass
+        `dx = world_x / image_width`.
+
+        The old code scaled by z/denom instead of dividing by it, which sent u
+        and v swinging +-20 image widths: a non-tiled image never landed inside
+        itself and drew nothing at all, so the track of every Mode7Driver-style
+        racer was missing and only the (tiled) field showed.
         """
         obj = self.deref(handle) if self.deref is not None and handle is not None else None
         surf = getattr(obj, "surface", None) if obj is not None else None
@@ -644,10 +658,13 @@ class Graphics:
             tile = bool(tile)
         except Exception:  # noqa: BLE001
             return
+        if z == 0:
+            return
 
         cx = x + centerx * width
         cy = y + centery * height
-        tan_tilt = math.tan(math.radians(tiltAngle))
+        t = math.radians(tiltAngle)
+        cos_t, sin_t = math.cos(t), math.sin(t)
         sw, sh = surf.get_size()
         if sw <= 0 or sh <= 0:
             return
@@ -663,66 +680,74 @@ class Graphics:
         Wd = x1 - x0
         Hd = y1 - y0
 
-        # --- Fast path ---------------------------------------------------
-        # With no shear (dxy == 0) and tiling, the source row `v` is constant
-        # across a destination row and `u` is linear in X: each destination row
-        # is just a horizontally scaled copy of one texture row. Doing that with
-        # pygame's C-level scale/blit instead of a per-pixel Python loop is what
-        # lets the emulator reach the console's 50 Hz (the Python loop capped
-        # Mode7 games around 37 fps, so their sprites moved visibly slower).
-        if tile and dxy == 0.0:
-            max_a = 0.0
-            for Y in range(y0, y1):
-                ny = (Y - cy) / height if height else 0.0
-                denom = z - (ny * height) * tan_tilt
-                s = 1.0 if abs(denom) < 1e-9 else z / denom
-                if abs(dxx * s) > max_a:
-                    max_a = abs(dxx * s)
-            ws_max = int(round(max_a * Wd)) + 2
-            tw = ((ws_max + sw) // sw + 1) * sw
-            tiled = pygame.Surface((tw, sh), pygame.SRCALPHA)
-            for i in range(0, tw, sw):
-                tiled.blit(surf, (i, 0))
-            for Y in range(y0, y1):
-                ny = (Y - cy) / height if height else 0.0
-                denom = z - (ny * height) * tan_tilt
-                s = 1.0 if abs(denom) < 1e-9 else z / denom
-                a_u = dxx * s
-                b_u = dx + s * (dyx * Y - dxx * cx - dyx * cy)
-                b_v = dy + s * (dyy * Y - dxy * cx - dyy * cy)
-                ws = int(round(abs(a_u) * Wd))
-                ws = max(1, min(ws, tw - sw))
-                offset = int(math.floor(b_u)) % sw
-                strip = tiled.subsurface((offset, int(b_v) % sh, ws, 1))
-                row = pygame.transform.scale(strip, (Wd, 1))
-                if a_u < 0:
-                    row = pygame.transform.flip(row, True, False)
-                canvas.blit(row, (x0, Y))
-            return
+        def row_affine(Y):
+            """(a_u, b_u, a_v, b_v) for `u = a_u*X + b_u`, `v = a_v*X + b_v`,
+            or None for a row at/above the horizon, where the plane is not."""
+            gy = cy - Y
+            denom = z * cos_t - gy * sin_t
+            if denom <= 1e-9:
+                return None
+            k = cos_t / denom
+            g = gy / denom
+            return (dxx * k, dx + dyx * g - dxx * k * cx,
+                    dxy * k, dy + dyy * g - dxy * k * cx)
 
-        # --- General path (shear or untiled): per-pixel sampling ----------
+        # --- Fast path: no shear + tiling --------------------------------
+        # v is then constant across the row and u is linear in X, so a row is a
+        # horizontally scaled copy of one texture row: pygame's C-level scale
+        # beats the per-pixel Python loop. Only worth it while the strip stays
+        # sane; near the horizon the texture repeats endlessly and the general
+        # path below handles it.
+        if tile and dxy == 0.0:
+            max_span = 0.0
+            for Y in range(y0, y1):
+                ra = row_affine(Y)
+                if ra is not None and abs(ra[0]) * sw > max_span:
+                    max_span = abs(ra[0]) * sw
+            ws_max = int(round(max_span * Wd)) + 2
+            if ws_max <= 8192:
+                tw = ((ws_max + sw) // sw + 1) * sw
+                tiled = pygame.Surface((tw, sh), pygame.SRCALPHA)
+                for i in range(0, tw, sw):
+                    tiled.blit(surf, (i, 0))
+                for Y in range(y0, y1):
+                    ra = row_affine(Y)
+                    if ra is None:
+                        continue
+                    a_u, b_u, _a_v, b_v = ra
+                    ws = max(1, min(int(round(abs(a_u) * sw * Wd)), tw - sw))
+                    off = int(math.floor((a_u * x0 + b_u) * sw)) % sw
+                    vp = int((b_v % 1.0) * sh) % sh
+                    strip = tiled.subsurface((off, vp, ws, 1))
+                    row = pygame.transform.scale(strip, (Wd, 1))
+                    if a_u < 0:
+                        row = pygame.transform.flip(row, True, False)
+                    canvas.blit(row, (x0, Y))
+                return
+
+        # --- General path (shear, untiled or extreme perspective) ---------
         # The source is copied to a list of rows first: subscripting a plain
         # list is measurably faster than a double PixelArray lookup per pixel.
-        rows = [[surf.get_at((sx, sy)) for sx in range(sw)] for sy in range(sh)]
+        rows = [[surf.get_at((sx_, sy_)) for sx_ in range(sw)] for sy_ in range(sh)]
         out = pygame.Surface((Wd, Hd), pygame.SRCALPHA)
         dst = pygame.PixelArray(out)
         try:
             for py in range(Hd):
-                Y = y0 + py
-                ny = (Y - cy) / height if height else 0.0
-                denom = z - (ny * height) * tan_tilt
-                s = 1.0 if abs(denom) < 1e-9 else z / denom
-                a_u, a_v = dxx * s, dxy * s
-                b_u = dx + s * (dyx * Y - dxx * cx - dyx * cy)
-                b_v = dy + s * (dyy * Y - dxy * cx - dyy * cy)
+                ra = row_affine(y0 + py)
+                if ra is None:
+                    continue
+                a_u, b_u, a_v, b_v = ra
                 for px in range(Wd):
                     X = x0 + px
                     u, v = a_u * X + b_u, a_v * X + b_v
                     if tile:
-                        u, v = u % sw, v % sh
-                    elif u < 0 or u >= sw or v < 0 or v >= sh:
-                        continue
-                    dst[px, py] = rows[int(math.floor(v))][int(math.floor(u))]
+                        sx_ = min(sw - 1, int((u % 1.0) * sw))
+                        sy_ = min(sh - 1, int((v % 1.0) * sh))
+                    else:
+                        if not (0.0 <= u < 1.0 and 0.0 <= v < 1.0):
+                            continue
+                        sx_, sy_ = min(sw - 1, int(u * sw)), min(sh - 1, int(v * sh))
+                    dst[px, py] = rows[sy_][sx_]
         finally:
             del dst
         canvas.blit(out, (x0, y0))
