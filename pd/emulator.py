@@ -204,15 +204,18 @@ class Emulator:
             return
         name = missing or (runtime.missing_assets[0] if runtime.missing_assets else None)
         self.incomplete = name or "archivo desconocido"
-        detail = f" ({why})" if why else ""
-        print(f"[juego incompleto] falta {self.incomplete!r} en "
-              f"{runtime.asset_dir or self.game_name}{detail}")
+        parts = [why] if why else []
+        if runtime.missing_assets:
+            parts.append("ausentes: " + ", ".join(sorted(set(runtime.missing_assets))))
+        print(f"[juego incompleto] {self.incomplete} :: " + " | ".join(parts or ["?"]))
 
     def _game_error(self, runtime, exc):
-        """A game error is only printed -- unless it follows a missing file, in
-        which case the bundle is incomplete and the error screen takes over."""
+        """A game error is only printed -- unless the game had already asked for
+        a file that is not there, in which case it is reported as incomplete."""
         if runtime.incomplete or runtime.missing_assets:
-            self._mark_incomplete(runtime, runtime.incomplete)
+            first = str(exc).splitlines()[0]
+            self._mark_incomplete(runtime, runtime.incomplete,
+                                  why=f"{type(exc).__name__}: {first}")
             return
         print(f"[frame {self.frame}] game error: {type(exc).__name__}: {str(exc)[:120]}")
 

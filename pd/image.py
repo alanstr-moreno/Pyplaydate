@@ -29,15 +29,23 @@ def resolve_asset(asset_dir, name):
     base, ext = os.path.splitext(name)
     if ext.lower() in (".png", ".pdi", ".pdt", ".psd", ".gif", ".jpg", ".jpeg", ".lua", ".pft", ".fnt"):
         candidatos.insert(0, base)          # the name without extension, first
-    for cand in candidatos:
-        for e in ASSET_EXTS:
-            p = os.path.join(asset_dir, cand + e)
+    # The bundle first, then the folder that HOLDS it: a .pdx is often dropped
+    # next to loose assets (modo7/alan7.pdx with track.png, field.png and
+    # sky.png beside it). Looking only inside the bundle made every such asset
+    # resolve to nil, and the game died indexing it.
+    roots = (asset_dir, os.path.dirname(asset_dir.rstrip(os.sep)))
+    for root in roots:
+        if not root or not os.path.isdir(root):
+            continue
+        for cand in candidatos:
+            for e in ASSET_EXTS:
+                p = os.path.join(root, cand + e)
+                if os.path.isfile(p):
+                    return p
+            # also the name as-is (assets without an extension)
+            p = os.path.join(root, cand)
             if os.path.isfile(p):
                 return p
-        # also the name as-is (assets without an extension)
-        p = os.path.join(asset_dir, cand)
-        if os.path.isfile(p):
-            return p
     return None
 
 

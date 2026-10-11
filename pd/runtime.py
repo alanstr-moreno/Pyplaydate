@@ -459,10 +459,13 @@ class Runtime:
             # constants (so the game does not get nil)
             # REAL SDK values (pd_api_gfx.h: enum LCDSolidColor
             # { kColorBlack=0, kColorWhite=1 }). They were inverted (1/0).
+            # LCDSolidColor from the SDK (pd_api_gfx.h): Black=0, White=1,
+            # Clear=2, XOR=3. Clear and XOR were shifted down by one, which made
+            # kColorClear == kColorBlack.
             "kColorBlack": 0,
             "kColorWhite": 1,
-            "kColorClear": 0,
-            "kColorXOR": 2,
+            "kColorClear": 2,
+            "kColorXOR": 3,
             "kImageUnflipped": 0,
             "kImageFlippedX": 1,
             "kImageFlippedY": 2,
@@ -740,7 +743,7 @@ class Runtime:
     def _image_clear(self, handle, color=None):
         """image:clear([color]): empties the image.
 
-        kColorClear (0) and no argument = TRANSPARENT (truly empty). An explicit
+        kColorClear (2) and no argument = TRANSPARENT (truly empty). An explicit
         color = opaque fill. Without this method, a game UI system
         `img:clear(...)` crashes and the drawing never reaches the image.
         """
@@ -748,10 +751,33 @@ class Runtime:
         surf = getattr(obj, "surface", None) if obj is not None else None
         if surf is None:
             return
-        if color is None or color == 0:
+        if color is None or int(color) == 2:           # 2 = kColorClear
             surf.fill((0, 0, 0, 0))
         else:
             surf.fill((0, 0, 0, 255))
+
+    def _image_sample(self, handle, x, y):
+        """image:sample(x, y) -> kColorWhite / kColorBlack / kColorClear.
+
+        A Mode7 game reads its track texture pixel by pixel with this to know
+        where the road ends and the grass begins. It was missing entirely, so
+        the call was nil and the game died on its very first frame
+        (`method 'sample' is not callable`).
+        """
+        obj = self._deref(handle) if handle is not None else None
+        surf = getattr(obj, "surface", None) if obj is not None else None
+        if surf is None:
+            return 2                                   # kColorClear
+        try:
+            x, y = int(float(x)), int(float(y))
+        except (TypeError, ValueError):
+            return 2
+        if x < 0 or y < 0 or x >= surf.get_width() or y >= surf.get_height():
+            return 2
+        r, g, b, a = surf.get_at((x, y))
+        if a == 0:
+            return 2                                   # kColorClear
+        return 1 if (r + g + b) >= 3 * 128 else 0      # kColorWhite / kColorBlack
 
     def _image_handle(self, img):
         from .image import PDImage
@@ -773,6 +799,9 @@ class Runtime:
                 g.image_draw_faded(_h, x, y, alpha, flip),
             "drawAnchored": lambda _h, x, y, ax=0, ay=0, *a: g.image_draw_anchored(
                 _h, x, y, ax, ay),
+            # sample(x, y): reads one pixel back as kColorWhite/kColorBlack/
+            # kColorClear. Mode7 games sample their track texture with it.
+            "sample": lambda _h, x, y, *a: self._image_sample(_h, x, y),
             # clear([color]): a game UI uses it to empty its cached image
             # before redrawing it. It was missing entirely.
             "clear": lambda _h=None, color=None, *a: self._image_clear(_h, color),

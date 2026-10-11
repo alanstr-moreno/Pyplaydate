@@ -21,6 +21,32 @@ import pygame
 
 CELL_HEADER = 16
 
+# Magic numbers of the loose raster formats a game may ship next to its bundle.
+# A real .pdx contains .pdi/.pdt (pdc converts the PNGs), but a game dropped
+# beside its raw track.png / sky.png must still run: those bytes are NOT a
+# Playdate cell, so decoding them as one fails with an IndexError.
+RASTER_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"\xff\xd8\xff", "jpg"),
+    (b"GIF87a", "gif"),
+    (b"GIF89a", "gif"),
+)
+
+
+def is_raster(data):
+    return any(data.startswith(m) for m, _ in RASTER_MAGIC)
+
+
+def decode_raster(data):
+    """Decodes a loose PNG/JPEG/GIF with pygame (same surface contract)."""
+    import io
+
+    surf = pygame.image.load(io.BytesIO(data))
+    try:
+        return surf.convert_alpha()          # needs a display; else keep as-is
+    except pygame.error:
+        return surf
+
 
 def _u16(b, o):
     return struct.unpack_from("<H", b, o)[0]
@@ -77,7 +103,11 @@ def decode_pdi(data, background=(255, 255, 255)):
 
     Acepta el archivo con cabecera ('Playdate IMG' + flags) o sin ella (el caso
     de los assets que vienen DENTRO de un .pdz, que pierden los 16 primeros bytes).
+    También acepta un PNG/JPEG/GIF suelto, que es lo que hay cuando un juego se
+    ejecuta junto a sus imágenes sin compilar.
     """
+    if is_raster(data):
+        return decode_raster(data)
     if data[:12] == b"Playdate IMG":
         flags = _u32(data, 12)
         off = 16
@@ -94,6 +124,8 @@ def decode_pdi(data, background=(255, 255, 255)):
 
 def decode_pdt(data, background=(255, 255, 255)):
     """Decodifica un .pdt (image table) -> (lista de Surface, celdas_por_fila)."""
+    if is_raster(data):                     # a loose image: one-cell table
+        return [decode_raster(data)], 1
     if data[:12] == b"Playdate IMT":
         flags = _u32(data, 12)
         off = 16
