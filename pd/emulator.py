@@ -27,6 +27,40 @@ KEYMAP = {
 CRANK_STEP = 22.5
 CRANK_KEYS = {pygame.K_q: -1, pygame.K_e: 1}
 
+
+class _FrameLimiter:
+    """Precise frame limiter (fixed deadline, not SDL_Delay).
+
+    pygame's `Clock.tick()` sleeps through SDL_Delay, which on macOS overshoots
+    by ~4 ms per frame: asking for 50 Hz actually produced ~42 Hz. Games whose
+    speed depends on how many times per second `playdate.update()` runs (any
+    frame-counted animation, e.g. Mode7 backgrounds) therefore ran ~16% slower
+    than the official simulator. Scheduling against an absolute deadline keeps
+    the long-run rate exact even when an individual sleep overshoots; the last
+    `spin` seconds are busy-waited to avoid the sleep granularity.
+    """
+
+    def __init__(self, fps, spin=0.0015):
+        self.period = (1.0 / float(fps)) if fps else 0.0
+        self.spin = spin
+        self._deadline = time.perf_counter()
+
+    def tick(self):
+        if self.period <= 0:
+            return
+        self._deadline += self.period
+        now = time.perf_counter()
+        if now - self._deadline > self.period:
+            self._deadline = now          # fell behind: resync, never spin
+            return
+        while True:
+            d = self._deadline - time.perf_counter()
+            if d <= 0:
+                return
+            if d > self.spin:
+                time.sleep(d - self.spin)
+
+
 CONTROLS = """\
   arrows / WASD ......... D-pad
   X or SPACE ........... A (right button)
@@ -69,7 +103,7 @@ class Emulator:
         flags = 0
         win = pygame.display.set_mode(self.screen.window_size(self.scale), flags)
         pygame.display.set_caption(f"Playdate Pi — {self.game_name}")
-        clock = pygame.time.Clock()
+        clock = _FrameLimiter(self.fps)
 
         runtime = Runtime(self)
         runtime.verbose = bool(getattr(self, "verbose", False))
@@ -114,7 +148,7 @@ class Emulator:
 
             self.frame += 1
             runtime.playdate.button.end_frame()
-            clock.tick(self.fps)
+            clock.tick()
             if max_frames and self.frame >= max_frames:
                 self.running = False
 
