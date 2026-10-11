@@ -8,6 +8,7 @@ This is the object that holds the already-decoded Surface; the Lua "handles"
 
 import os
 
+from .errors import GameIncomplete
 from .pdi import decode_pdi, decode_pdt
 
 ASSET_EXTS = (".pdi", ".pdt", ".png", ".gif", "")
@@ -81,7 +82,7 @@ def load_image(asset_dir, path):
     """image.new(path) -> PDImage (decodes .pdi/.pdt; supports .png fallback)."""
     real = resolve_asset(asset_dir, path)
     if real is None:
-        raise FileNotFoundError(f"asset not found: {path!r} in {asset_dir!r}")
+        raise GameIncomplete(path, kind="image")
     with open(real, "rb") as f:
         data = f.read()
     return PDImage(decode_pdi(data))
@@ -91,7 +92,7 @@ def load_imagetable(asset_dir, path):
     """imagetable.new(path) -> PDImageTable."""
     real = resolve_asset(asset_dir, path)
     if real is None:
-        raise FileNotFoundError(f"imagetable not found: {path!r} in {asset_dir!r}")
+        raise GameIncomplete(path, kind="imagetable")
     with open(real, "rb") as f:
         data = f.read()
     cells, per_row = decode_pdt(data)

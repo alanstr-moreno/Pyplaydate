@@ -23,7 +23,17 @@ import time
 
 from . import graphics as gfx_mod
 from . import input as input_mod
+from .errors import GameIncomplete
 from .luavm import HAS_PLAYDATE_LUA, LUA_KIND, lupa  # noqa: F401  (lupa reexportado)
+
+# Extensions `import` may point at that are DATA, not code. The official pdc is
+# permissive here: importing a .png or a .wav that exists is a no-op, never an
+# attempt to execute it.
+MEDIA_EXTS = (
+    ".png", ".gif", ".jpg", ".jpeg", ".bmp", ".pdi", ".pdt", ".pft",
+    ".pda", ".pdz", ".wav", ".mp3", ".aif", ".aiff", ".m4a", ".ogg",
+    ".json", ".txt", ".fnt", ".ttf", ".otf", ".csv", ".tmx", ".xml",
+)
 
 
 def _groups_to_mask(groups):
@@ -350,6 +360,8 @@ class Runtime:
         self.api = None
         self.chunks = None          # .pdx mode: name -> bytecode bytes
         self.asset_dir = None
+        self.incomplete = None      # first file the game asked for that is missing
+        self.missing_assets = []    # every asset requested and not found (for the log)
         self.on_ready = None        # optional hook: called before running the game
         self._registry = {}         # id -> Python object (images, imagetables, fonts)
         self._next_id = 1
@@ -832,12 +844,17 @@ class Runtime:
                     surf.fill((0, 0, 0, 0))
                     return self._image_handle(PDImage(surf))
                 return self._image_handle(load_image(self.playdate.graphics.asset_dir, a))
+            except GameIncomplete as e:
+                # The game may be PROBING for assets that legitimately do not
+                # exist (it walks explosion frames 1..N until one is missing),
+                # so it keeps getting nil, exactly like on the console. The name
+                # is remembered so that a crash right after can be reported as
+                # "juego incompleto" instead of a bare traceback.
+                self._note_missing(e.missing)
+                return None
             except Exception as e:  # noqa: BLE001
-                # `image.new` returns nil when the asset does not exist and the
-                # game usually handles it (it asks for extra frames, e.g.
-                # explosion/9-11 over 8 real ones). Warning EVERY TIME floods the
-                # console of a game that calls this every frame; it warns once per
-                # asset and only in verbose mode.
+                # Warning EVERY TIME floods the console of a game that calls this
+                # every frame; it warns once per asset and only in verbose mode.
                 if self.verbose and a not in self._asset_warned:
                     self._asset_warned.add(a)
                     print(f"[image.new] {a!r}: {e}")
@@ -869,6 +886,9 @@ class Runtime:
             try:
                 return self._imagetable_handle(
                     load_imagetable(self.playdate.graphics.asset_dir, path))
+            except GameIncomplete as e:
+                self._note_missing(e.missing)           # nil, like the console
+                return None
             except Exception as e:  # noqa: BLE001
                 print(f"[imagetable.new] {path!r}: {e}")
                 return None
@@ -1664,31 +1684,71 @@ class Runtime:
         f = self._pd_load(self.chunks[name], "@" + name)
         f()
 
+    def _note_missing(self, name):
+        """Remembers a file the game asked for and was not there."""
+        self.missing_assets.append(name)
+        if self.incomplete is None:
+            self.incomplete = name
+
+    def _find_game_file(self, name):
+        """Looks `name` up in the folder the game is running from.
+
+        pdc resolves assets without the extension too, so `import "track"` also
+        matches `track.lua` / `track.png`. Two roots are searched, most specific
+        first: the bundle itself, then the folder that holds it -- a .pdx is
+        often dropped next to loose assets (modo7/alan7.pdx with track.png,
+        field.png and sky.png beside it). Returns the real path, or None.
+        """
+        if not self.asset_dir:
+            return None
+        if os.path.splitext(name)[1]:
+            exts = ("",)                       # explicit extension: exact match
+        else:
+            exts = (".lua",) + MEDIA_EXTS + ("",)   # code first, then data
+        roots = [self.asset_dir,
+                 os.path.dirname(self.asset_dir.rstrip(os.sep))]
+        for d in roots:
+            if not d or not os.path.isdir(d):
+                continue
+            base = os.path.join(d, name)
+            for ext in exts:
+                p = base + ext
+                if os.path.isfile(p):
+                    return p
+        return None
+
     def _make_import(self):
-        """Playdate: `import "CoreLibs/graphics"` loads the .pdz chunk ONCE."""
+        """Playdate: `import "CoreLibs/graphics"` loads a module ONCE.
+
+        `pdc` is permissive about what an import may point at, and we mirror it:
+          - a compiled chunk in the .pdz, or a .lua next to the game -> run it;
+          - an existing media/data file (.png, .wav, .json...) -> return
+            silently: it is data, importing it never executes anything;
+          - nothing at all -> the game is INCOMPLETE. We raise GameIncomplete
+            instead of returning nil, so the emulator can stop the Lua loop and
+            paint the error screen rather than dying later with a confusing
+            "attempt to index a nil value (global 'track')".
+        """
         loaded = set()
 
         def _do_import(name, *rest):
-            n = str(name).lstrip("/")
-            if n.endswith(".lua"):
-                n = n[:-4]
-            if n in loaded:
+            raw = str(name).lstrip("/")
+            key = raw[:-4] if raw.lower().endswith(".lua") else raw
+            if key in loaded:
                 return
-            loaded.add(n)
+            loaded.add(key)
             # 1) a compiled chunk shipped in the .pdz (source mode: chunks is None)
-            if self.chunks and n in self.chunks:
-                self._run_chunk(n)
+            if self.chunks and (raw in self.chunks or key in self.chunks):
+                self._run_chunk(raw if raw in self.chunks else key)
                 return
-            # 2) a .lua module inside the (source) game folder
-            if self.asset_dir:
-                p = os.path.join(self.asset_dir, n + ".lua")
-                if os.path.isfile(p):
-                    try:
-                        with open(p, encoding="utf-8") as fh:
-                            self.lua.execute(_expand_compound_assign(fh.read()))
-                        return
-                    except OSError:
-                        pass
+            # 2) a file in the folder the game runs from
+            real = self._find_game_file(raw)
+            if real is not None:
+                if real.lower().endswith(".lua"):
+                    with open(real, encoding="utf-8") as fh:
+                        self.lua.execute(_expand_compound_assign(fh.read()))
+                # media / data: tolerated silently, exactly like pdc
+                return
             # CORELIBS LIVE IN THE CONSOLE FIRMWARE, not in the .pdx: a game
             # does `import "CoreLibs/nineslice"` and on the console it works
             # even if the bundle does not ship that file (Smolitaire only ships
@@ -1696,11 +1756,18 @@ class Runtime:
             # Without this fallback the import failed SILENTLY and the game was
             # left missing pieces: Smolitaire menu is a dialog2 window that
             # uses nineslice, so the menu simply did not exist.
-            src = _sdk_corelib_source(n)
+            src = _sdk_corelib_source(key)
             if src is not None:
                 self.lua.execute(src)      # the .lua source is compiled on the fly
                 return
-            print(f"[import] no encontrado en el .pdz: {name}")
+            # 3) the file is simply not there. Return nil (what the console
+            # does) and REMEMBER it: some imports are optional and the game
+            # carries on happily -- one real game imports a crank asset path
+            # that never ships and works fine. If the game does trip over the
+            # nil, the error that follows is reported as "juego incompleto"
+            # rather than a bare traceback.
+            self._note_missing(raw)
+            return None
 
         return _do_import
 

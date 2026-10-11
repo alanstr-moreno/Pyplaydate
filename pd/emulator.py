@@ -3,10 +3,12 @@
 import os
 import sys
 import time
+import traceback
 
 import pygame
 
 from . import screen as screen_mod
+from .errors import GameIncomplete
 from .runtime import Runtime
 
 # pygame key -> Playdate button
@@ -93,6 +95,9 @@ class Emulator:
         self.headless = headless
         self.frame = 0
         self.running = False
+        # Set when the game asks for a file that is not there: the Lua loop
+        # stops and the error screen is painted instead of the game dying.
+        self.incomplete = None
         self.screen = screen_mod.Screen(palette=palette)
         self.crank_angle = 0.0        # degrees, the crank's source of truth
         self._crank_dir = 0           # -1 / +1 while Q or E is held
@@ -123,7 +128,19 @@ class Emulator:
         runtime.verbose = bool(getattr(self, "verbose", False))
         self._runtime = runtime
         self._button = runtime.playdate.button
-        runtime.load(self._resolve_game_dir())
+        # A game whose bundle is missing files must NOT take the process down
+        # with a traceback: it is caught here and turned into the error screen.
+        try:
+            runtime.load(self._resolve_game_dir())
+        except GameIncomplete as e:
+            self._mark_incomplete(runtime, e.missing)
+        except SystemExit:
+            raise
+        except Exception as e:  # noqa: BLE001
+            if getattr(self, "verbose", False):
+                traceback.print_exc()      # --verbose: full trace for debugging
+            self._mark_incomplete(runtime, runtime.incomplete,
+                                  why=f"{type(e).__name__}: {e}")
 
         if not self.headless:
             print(f"Playdate Pi — {self.game_name}\n{CONTROLS}")
@@ -144,19 +161,27 @@ class Emulator:
             if crank_delta:
                 self.crank_angle += crank_delta
 
-            # Game errors must NOT close the emulator: they are printed (with
-            # the frame) and the last screen keeps being drawn. On the console a
-            # script error returns you to the menu, it never shuts the window.
-            try:
-                runtime.call_update()
-                runtime.call_draw()
-            except Exception as e:  # noqa: BLE001
-                print(f"[frame {self.frame}] game error: {type(e).__name__}: {str(e)[:120]}")
-            if crank_delta:
+            if self.incomplete:
+                # The game asked for a missing file: the Lua loop is stopped and
+                # the error screen painted, but the window stays open (QUIT/ESC
+                # still work) exactly so the user can see what happened.
+                self._draw_incomplete()
+            else:
+                # Game errors must NOT close the emulator: they are printed (with
+                # the frame) and the last screen keeps being drawn. On the console
+                # a script error returns you to the menu, it never shuts the window.
+                # A missing file is different: it means the bundle is incomplete,
+                # so the loop stops and the error screen takes over.
                 try:
-                    runtime.call_crank(crank_delta, 0)
+                    runtime.call_update()
+                    runtime.call_draw()
                 except Exception as e:  # noqa: BLE001
-                    print(f"[frame {self.frame}] crank error: {str(e)[:120]}")
+                    self._game_error(runtime, e)
+                if crank_delta and not self.incomplete:
+                    try:
+                        runtime.call_crank(crank_delta, 0)
+                    except Exception as e:  # noqa: BLE001
+                        self._game_error(runtime, e)
             self.screen.render(win, self.scale)
             pygame.display.flip()
 
@@ -171,6 +196,37 @@ class Emulator:
                 self.running = False
 
         pygame.quit()
+
+    # --- error screen ----------------------------------------------------
+    def _mark_incomplete(self, runtime, missing=None, why=None):
+        """Records that the game is incomplete; the Lua loop stops from here on."""
+        if self.incomplete:
+            return
+        name = missing or (runtime.missing_assets[0] if runtime.missing_assets else None)
+        self.incomplete = name or "archivo desconocido"
+        detail = f" ({why})" if why else ""
+        print(f"[juego incompleto] falta {self.incomplete!r} en "
+              f"{runtime.asset_dir or self.game_name}{detail}")
+
+    def _game_error(self, runtime, exc):
+        """A game error is only printed -- unless it follows a missing file, in
+        which case the bundle is incomplete and the error screen takes over."""
+        if runtime.incomplete or runtime.missing_assets:
+            self._mark_incomplete(runtime, runtime.incomplete)
+            return
+        print(f"[frame {self.frame}] game error: {type(exc).__name__}: {str(exc)[:120]}")
+
+    def _draw_incomplete(self):
+        """Paints "juego incompleto" centered, keeping the window alive."""
+        scr = self.screen
+        scr.canvas.fill((255, 255, 255))
+        try:
+            font = pygame.font.Font(None, 34)
+            text = font.render("juego incompleto", True, (0, 0, 0))
+            scr.canvas.blit(text, text.get_rect(
+                center=(scr.width // 2, scr.height // 2)))
+        except Exception:  # noqa: BLE001  (no font available: leave it blank)
+            pass
 
     def _key(self, key, down):
         if key == pygame.K_ESCAPE:
