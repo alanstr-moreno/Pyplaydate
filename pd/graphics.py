@@ -18,6 +18,15 @@ WHITE = (255, 255, 255)
 # Sentinel: "this context does not hold the lock" (see pushContext/popContext).
 _NO_LOCK = object()
 
+# Focal length of the sampling camera, as a multiple of the plane distance z
+# (f = FOCAL_RATIO * z, so z still drives how exaggerated the perspective gets).
+# The SDK does not publish the constant, so it is fitted to the SDK's own art:
+# in Mode7Driver the road is 19 px wide in track.png and the truck sprite is
+# 18 px, i.e. they were drawn to line up 1:1 on screen. With FOCAL_RATIO = 1 the
+# ground came out 2.4x too compressed (a 8 px road under an 18 px truck); 2.4
+# puts the ground back at 1:1 with the sprites.
+FOCAL_RATIO = 2.4
+
 
 class Graphics:
     def __init__(self, screen):
@@ -684,7 +693,7 @@ class Graphics:
             """(a_u, b_u, a_v, b_v) for `u = a_u*X + b_u`, `v = a_v*X + b_v`,
             or None for a row at/above the horizon, where the plane is not."""
             gy = cy - Y
-            denom = z * cos_t - gy * sin_t
+            denom = FOCAL_RATIO * z * cos_t - gy * sin_t
             if denom <= 1e-9:
                 return None
             k = cos_t / denom
