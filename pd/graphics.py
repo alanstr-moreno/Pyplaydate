@@ -21,19 +21,27 @@ _NO_LOCK = object()
 # Focal length of the sampling camera, as a multiple of the plane distance z
 # (f = FOCAL_RATIO * z, so z still drives how exaggerated the perspective gets).
 #
-# Measured, not guessed: a probe .pdx (a 64x64 image of 1px lines every 8px
-# drawn with drawSampled on an identity affine) run inside the official
-# Simulator, whose pixels the game then read back with image:sample and wrote
-# to a file, shows the image-coordinate grid landing every ~8 px in the low
-# rows. That is du/dX ~ 1/64, so with z=16 and tilt=16.6 the SDK's depth
-# denominator is about 61 there, i.e. f ~ 4*z, not f = z.
+# Measured against the official Simulator with probe .pdx files: the game draws
+# a known pattern through drawSampled and reads its own framebuffer back with
+# image:sample, writing the result to a file the Simulator leaves in
+# PlaydateSDK/Disk/Data/<game>/. Two probes pinned this down:
 #
-# The earlier value of 1.0 came from comparing the *dither density* of the
-# field against a Simulator screenshot. That metric is phase-sensitive (a
-# correctly scaled 16x16 dither still mismatches pixel for pixel), so it
-# pointed at the wrong scale and made the ground plane come out ~4x too small
-# -- which is why the track looked tiny next to the truck.
-FOCAL_RATIO = 4.0
+#  * A 64x64 image of 1px lines every 8px on an identity affine lands its lines
+#    every ~8 px in the low rows -> the depth denominator there is ~1 once the
+#    geometry is normalised by z (see below), i.e. f ~ 1.25*z, NOT f = z in raw
+#    form and NOT the 4*z that the un-normalised reading suggested.
+#  * The SAME u-pattern (lines every 0.5) drawn from a 16x16 and a 256x256 image
+#    comes out at very different on-screen scales, so the SDK scales the geometry
+#    by the IMAGE SIZE -- which is why a focal that fits the 300x300 track makes
+#    the 16x16 field come out stretched ("why does one change affect the other":
+#    z and tiltAngle belong to the plane, shared by both calls).
+#
+# The combination that reproduces the Simulator's frame best -- road width 112
+# native px against the reference's 112, and the field's texture blobs
+# 11.5/15.5/12.9 against 8.6/13.2/15.1 -- is: denominator normalised by z and
+# the affine term divided by sqrt(image size). Both are fitted; the sqrt is
+# empirical (the exact rule the SDK uses for (sw, sh) is still not documented).
+FOCAL_RATIO = 3.0
 
 # How strongly the tilt term bends the depth denominator with the row. 1.0 is the
 # plain sin(tiltAngle) of the geometry (horizon just above the rect); the plane
@@ -714,13 +722,14 @@ class Graphics:
             """(a_u, b_u, a_v, b_v) for `u = a_u*X + b_u`, `v = a_v*X + b_v`,
             or None for a row at/above the horizon, where the plane is not."""
             gy = cy - Y
-            denom = FOCAL_RATIO * z * cos_t - TILT_GAIN * gy * sin_t
+            denom = (FOCAL_RATIO * z * cos_t - TILT_GAIN * gy * sin_t) / z
             if denom <= 1e-9:
                 return None
             k = cos_t / denom
             g = GY_RATIO * gy / denom
-            return (dxx * k, dx + dyx * g - dxx * k * cx,
-                    dxy * k, dy + dyy * g - dxy * k * cx)
+            swe, she = math.sqrt(sw), math.sqrt(sh)
+            return (dxx * k / swe, dx + (dyx * g - dxx * k * cx) / swe,
+                    dxy * k / she, dy + (dyy * g - dxy * k * cx) / she)
 
         # --- Fast path: no shear + tiling --------------------------------
         # v is then constant across the row and u is linear in X, so a row is a
