@@ -20,13 +20,27 @@ _NO_LOCK = object()
 
 # Focal length of the sampling camera, as a multiple of the plane distance z
 # (f = FOCAL_RATIO * z, so z still drives how exaggerated the perspective gets).
-# 1.0 is the plain geometry: f = z. It was CHECKED against a frame captured from
-# the official Simulator (modo7/alan7.pdx): the field's tiling density matches
-# at 1.0 and a larger focal visibly stretches the plane -- 2.4 was tried after
-# noticing the road came out thin, but it made the field look stretched while
-# the tiling no longer matched the reference, so it was reverted. Raise this only
-# to zoom the plane in deliberately.
-FOCAL_RATIO = 1.0
+#
+# Measured, not guessed: a probe .pdx (a 64x64 image of 1px lines every 8px
+# drawn with drawSampled on an identity affine) run inside the official
+# Simulator, whose pixels the game then read back with image:sample and wrote
+# to a file, shows the image-coordinate grid landing every ~8 px in the low
+# rows. That is du/dX ~ 1/64, so with z=16 and tilt=16.6 the SDK's depth
+# denominator is about 61 there, i.e. f ~ 4*z, not f = z.
+#
+# The earlier value of 1.0 came from comparing the *dither density* of the
+# field against a Simulator screenshot. That metric is phase-sensitive (a
+# correctly scaled 16x16 dither still mismatches pixel for pixel), so it
+# pointed at the wrong scale and made the ground plane come out ~4x too small
+# -- which is why the track looked tiny next to the truck.
+FOCAL_RATIO = 4.0
+
+# Scale applied to the vertical (plane-depth) geometry coordinate. The SDK does
+# not document how the tilted plane maps to geometry coordinates, so this is a
+# fitting knob: the field only reveals the horizontal spread (its dither hides
+# the vertical one) while the (non-tiled) track reveals both, because its
+# texture is 300x300 and its road wanders across the whole image.
+GY_RATIO = 1.0
 
 
 class Graphics:
@@ -698,7 +712,7 @@ class Graphics:
             if denom <= 1e-9:
                 return None
             k = cos_t / denom
-            g = gy / denom
+            g = GY_RATIO * gy / denom
             return (dxx * k, dx + dyx * g - dxx * k * cx,
                     dxy * k, dy + dyy * g - dxy * k * cx)
 
